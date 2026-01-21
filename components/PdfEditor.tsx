@@ -11,6 +11,32 @@ import {
 } from "@/lib/pdf-utils";
 import * as pdfjsLib from "pdfjs-dist";
 
+const colorToHexForInput = (color: string | undefined | null): string => {
+  if (!color || color === "transparent") return "#000000";
+
+  // Already hex
+  if (color.startsWith("#")) {
+    // Normalize shorthand #rgb to #rrggbb
+    if (color.length === 4) {
+      const r = color[1];
+      const g = color[2];
+      const b = color[3];
+      return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+    }
+    if (color.length === 7) return color.toLowerCase();
+    return "#000000";
+  }
+
+  // rgb()/rgba()
+  const m = color.match(/rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i);
+  if (!m) return "#000000";
+  const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, "0");
+  const r = toHex(parseInt(m[1], 10));
+  const g = toHex(parseInt(m[2], 10));
+  const b = toHex(parseInt(m[3], 10));
+  return `#${r}${g}${b}`;
+};
+
 export default function PdfEditor() {
   const [items, setItems] = useState<TextItem[]>([]);
   const [images, setImages] = useState<ImageItem[]>([]);
@@ -430,11 +456,7 @@ export default function PdfEditor() {
                   setSelectedTextId(item.id);
                   setToolbarFontFamily(item.fontName || "Helvetica");
                   setToolbarFontSize(Math.round(item.fontSize));
-                  setToolbarTextColor(
-                    item.textColor && item.textColor !== "transparent"
-                      ? item.textColor
-                      : "#000000"
-                  );
+                  setToolbarTextColor(colorToHexForInput(item.textColor));
                   setToolbarBold(!!item.isBold);
 
                   e.target.style.backgroundColor = activeBgColor;

@@ -74,6 +74,41 @@ const getCleanFontName = (fontName: string): string => {
   return cleanName;
 };
 
+const parseColorToRgbUnit = (
+  color: string | undefined,
+  fallback: { r: number; g: number; b: number }
+): { r: number; g: number; b: number } => {
+  if (!color || color === "transparent") return fallback;
+
+  // rgb() / rgba()
+  const rgbMatch = color.match(/rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/i);
+  if (rgbMatch) {
+    const r = Math.max(0, Math.min(255, parseInt(rgbMatch[1], 10))) / 255;
+    const g = Math.max(0, Math.min(255, parseInt(rgbMatch[2], 10))) / 255;
+    const b = Math.max(0, Math.min(255, parseInt(rgbMatch[3], 10))) / 255;
+    return { r, g, b };
+  }
+
+  // Hex #rgb or #rrggbb
+  if (color.startsWith("#")) {
+    const hex = color.slice(1);
+    if (hex.length === 3) {
+      const r = parseInt(hex[0] + hex[0], 16) / 255;
+      const g = parseInt(hex[1] + hex[1], 16) / 255;
+      const b = parseInt(hex[2] + hex[2], 16) / 255;
+      return { r, g, b };
+    }
+    if (hex.length === 6) {
+      const r = parseInt(hex.slice(0, 2), 16) / 255;
+      const g = parseInt(hex.slice(2, 4), 16) / 255;
+      const b = parseInt(hex.slice(4, 6), 16) / 255;
+      return { r, g, b };
+    }
+  }
+
+  return fallback;
+};
+
 /**
  * Convert a PDF point (bottom-left origin) into an HTML/CSS point (top-left origin).
  * This is the core "flip Y" math used for positioning overlay inputs.
@@ -182,35 +217,22 @@ export const saveModifiedPDF = async (
   // Save text changes
   textItems.forEach((item) => {
     if (item.hasChanged) {
+      // Derive background fill from sampled background (fallback white)
+      const bgColor = parseColorToRgbUnit(item.backgroundColor, { r: 1, g: 1, b: 1 });
+
       // 1. Whiteout the original text area
       firstPage.drawRectangle({
         x: item.x,
         y: item.y - item.height * 0.2, // Slight adjustment for baseline
         width: item.width * 1.5, // Widen to ensure coverage
         height: item.fontSize * 1.2,
-        color: rgb(1, 1, 1),
+        color: rgb(bgColor.r, bgColor.g, bgColor.b),
       });
 
-      // 2. Parse text color (default to black if not set or too close to white background)
-      let textColorRgb = { r: 0, g: 0, b: 0 };
-      if (item.textColor && item.textColor !== "transparent") {
-        const rgbaMatch = item.textColor.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
-        if (rgbaMatch) {
-          const r = parseInt(rgbaMatch[1]);
-          const g = parseInt(rgbaMatch[2]);
-          const b = parseInt(rgbaMatch[3]);
-
-          // If sampled text color is very close to white, clamp to black for readability
-          const isAlmostWhite = r > 230 && g > 230 && b > 230;
-          if (!isAlmostWhite) {
-            textColorRgb = {
-              r: r / 255,
-              g: g / 255,
-              b: b / 255,
-            };
-          }
-        }
-      }
+      // 2. Parse text color (supports rgb/rgba/hex). Default to black. Clamp away from near-white.
+      const parsedText = parseColorToRgbUnit(item.textColor, { r: 0, g: 0, b: 0 });
+      const isAlmostWhite = parsedText.r > 0.9 && parsedText.g > 0.9 && parsedText.b > 0.9;
+      const textColorRgb = isAlmostWhite ? { r: 0, g: 0, b: 0 } : parsedText;
 
       // 3. Draw the new text with correct font weight
       firstPage.drawText(item.text, {
