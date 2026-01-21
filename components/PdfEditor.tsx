@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { Download, Upload, Image as ImageIcon, X, Move, Maximize2 } from "lucide-react";
+import { Download, Upload, Image as ImageIcon, X, Maximize2 } from "lucide-react";
+import { CvDesigner } from "@/components/cv/CvDesigner";
 import {
   extractTextFromPDF,
   pdfPointToHtmlPoint,
@@ -10,6 +11,13 @@ import {
   ImageItem,
 } from "@/lib/pdf-utils";
 import * as pdfjsLib from "pdfjs-dist";
+
+type EditorMode = "pdf" | "cv";
+
+type PdfEditorProps = {
+  initialTemplate?: string;
+  initialMode?: EditorMode;
+};
 
 const colorToHexForInput = (color: string | undefined | null): string => {
   if (!color || color === "transparent") return "#000000";
@@ -37,7 +45,9 @@ const colorToHexForInput = (color: string | undefined | null): string => {
   return `#${r}${g}${b}`;
 };
 
-export default function PdfEditor() {
+export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorProps) {
+  const [mode, setMode] = useState<EditorMode>(initialMode === "cv" ? "cv" : "pdf");
+
   const [items, setItems] = useState<TextItem[]>([]);
   const [images, setImages] = useState<ImageItem[]>([]);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
@@ -56,6 +66,8 @@ export default function PdfEditor() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const isPdfMode = mode === "pdf";
 
   // 1. Handle File Upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,280 +311,319 @@ export default function PdfEditor() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8 flex flex-col items-center">
-       {/* File Toolbar */}
-      <div className="bg-white p-4 rounded-lg shadow-sm mb-6 flex gap-4 w-full max-w-4xl justify-between">
-        <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded cursor-pointer hover:bg-blue-700">
-            <Upload size={16} />
-            Upload PDF
-            <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
-          </label>
-          {fileUrl && (
-            <label className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded cursor-pointer hover:bg-purple-700">
-              <ImageIcon size={16} />
-              Add Image
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-            </label>
-          )}
+    <div className="min-h-screen bg-gradient-to-b from-[#0f172a] via-[#020617] to-[#020617] flex flex-col">
+      {/* Top App Bar */}
+      <header className="w-full border-b border-slate-800/80 bg-slate-950/40 backdrop-blur px-4 md:px-8 lg:px-12 py-3 flex items-center justify-between gap-4 text-white">
+        <div className="flex items-center gap-3">
+          <div className="text-sm font-semibold text-slate-50">Editor</div>
+          <div className="h-6 w-px bg-slate-700/80" />
+          <div className="inline-flex rounded-lg bg-white/5 p-1 ring-1 ring-slate-700/70">
+            <button
+              onClick={() => setMode("pdf")}
+              className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-semibold rounded-md ${
+                isPdfMode ? "bg-teal-500 text-slate-950 shadow-sm" : "text-slate-200 hover:bg-white/10"
+              }`}
+            >
+              PDF editor
+            </button>
+            <button
+              onClick={() => setMode("cv")}
+              className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-semibold rounded-md ${
+                !isPdfMode ? "bg-teal-500 text-slate-950 shadow-sm" : "text-slate-200 hover:bg-white/10"
+              }`}
+            >
+              CV designer (Canva style)
+            </button>
+          </div>
         </div>
-        <button
-          onClick={handleDownload}
-          disabled={!fileUrl}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
-        >
-          <Download size={16} />
-          Download PDF
-        </button>
-      </div>
+        <div className="text-xs text-slate-300/80">Build resumes faster with AI & precise PDF editing.</div>
+      </header>
 
-       {/* Formatting Toolbar (shown when some text is focused) */}
-       {fileUrl && selectedTextId && (
-         <div className="bg-white p-2 rounded-lg shadow-sm mb-4 flex items-center gap-3 w-full max-w-4xl">
-           {/* Font family */}
-           <select
-             value={toolbarFontFamily}
-             onChange={(e) => {
-               const value = e.target.value;
-               setToolbarFontFamily(value);
-               // Map to a reasonable CSS stack
-               let family = "";
-               if (value === "Times New Roman") {
-                 family = '"Times New Roman", Times, serif';
-               } else if (value === "Courier New") {
-                 family = '"Courier New", Courier, monospace';
-               } else {
-                 family = `${value}, Arial, Helvetica, sans-serif`;
-               }
-               updateSelectedTextFormat({
-                 fontName: value,
-                 fontFamily: family,
-               });
-             }}
-             className="px-2 py-1 border border-gray-300 rounded text-sm"
-           >
-             <option value="Helvetica">Helvetica</option>
-             <option value="Arial">Arial</option>
-             <option value="Times New Roman">Times New Roman</option>
-             <option value="Courier New">Courier New</option>
-           </select>
+      {/* PDF EDITOR MODE */}
+      {isPdfMode && (
+        <>
+          {/* File Toolbar */}
+          <div className="bg-white/90 border border-slate-800/60 rounded-xl shadow-sm mb-6 flex flex-wrap gap-3 w-full max-w-5xl items-center px-4 py-3 mx-auto">
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-slate-950 rounded-lg cursor-pointer hover:bg-teal-400 shadow-sm text-sm font-semibold">
+                <Upload size={16} />
+                Upload PDF
+                <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
+              </label>
+              {fileUrl && (
+                <label className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-teal-100 rounded-lg cursor-pointer hover:bg-slate-800 shadow-sm text-sm font-semibold">
+                  <ImageIcon size={16} />
+                  Add Image
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </label>
+              )}
+            </div>
+            <div className="flex-1" />
+            <button
+              onClick={handleDownload}
+              disabled={!fileUrl}
+              className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-slate-950 rounded-lg hover:bg-teal-400 disabled:opacity-50 shadow-sm text-sm font-semibold"
+            >
+              <Download size={16} />
+              Download PDF
+            </button>
+          </div>
 
-           {/* Font size */}
-           <input
-             type="number"
-             min={6}
-             max={72}
-             value={toolbarFontSize}
-             onChange={(e) => {
-               const size = parseInt(e.target.value || "0", 10) || 11;
-               setToolbarFontSize(size);
-               updateSelectedTextFormat({ fontSize: size });
-             }}
-             className="w-16 px-2 py-1 border border-gray-300 rounded text-sm"
-           />
-
-           {/* Bold toggle */}
-           <button
-             onClick={() => {
-               const nextBold = !toolbarBold;
-               setToolbarBold(nextBold);
-               updateSelectedTextFormat({ isBold: nextBold });
-             }}
-             className={`px-2 py-1 rounded text-sm font-bold ${
-               toolbarBold ? "bg-gray-800 text-white" : "border border-gray-300"
-             }`}
-           >
-             B
-           </button>
-
-           {/* Text color */}
-           <div className="flex items-center gap-1">
-             <span className="text-xs text-gray-600">Text color</span>
-             <input
-               type="color"
-               value={toolbarTextColor}
-               onChange={(e) => {
-                 const hex = e.target.value;
-                 setToolbarTextColor(hex);
-                 // Convert hex to rgb() string to stay compatible with saver
-                 const r = parseInt(hex.slice(1, 3), 16);
-                 const g = parseInt(hex.slice(3, 5), 16);
-                 const b = parseInt(hex.slice(5, 7), 16);
-                 const rgb = `rgb(${r}, ${g}, ${b})`;
-                 updateSelectedTextFormat({ textColor: rgb });
-               }}
-               className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
-             />
-           </div>
-         </div>
-       )}
-
-      {/* Editor Area */}
-      {fileUrl && (
-        <div className="relative shadow-xl border border-gray-300 bg-white">
-          {/* Layer A: Canvas (Visuals) */}
-          <canvas ref={canvasRef} className="block" />
-
-          {/* Layer B: Inputs (Editable) with sampled background + native look */}
-          {items.map((item) => {
-            const scale = 1.5;
-            const { x: htmlX, y: htmlY } = pdfPointToHtmlPoint(item.x, item.y, {
-              scale,
-              viewportHeight: pdfDimensions.height,
-              fontSize: item.fontSize,
-            });
-
-            // Calculate accurate text width using canvas measurement
-            const scaledFontSize = item.fontSize * scale;
-            // Extract first font name from fontFamily string (e.g., "Arial, Helvetica" -> "Arial")
-            let fontFamilyForMeasure = item.fontName || "Arial";
-            if (!item.fontName && item.fontFamily) {
-              const firstFont = item.fontFamily.split(",")[0].trim().replace(/['"]/g, "");
-              fontFamilyForMeasure = firstFont || "Arial";
-            }
-            const measuredWidth = measureTextWidth(item.text, scaledFontSize, fontFamilyForMeasure, item.isBold);
-            
-            // Use the larger of: original width, measured text width, or minimum 10px
-            // Add some padding (20px) for better UX
-            const baseWidth = item.width * scale;
-            const effectiveWidth = Math.max(baseWidth, measuredWidth + 20, 10);
-
-            const activeBgColor = item.backgroundColor || "transparent";
-            // Use detected text color from PDF, fallback to black
-            const activeTextColor = item.textColor && item.textColor !== "transparent" 
-              ? item.textColor 
-              : "#000000";
-
-            // 2. Ghosting fix: keep opaque bg only when text changed
-            const showBackground = item.hasChanged;
-
-            return (
-              <input
-                key={item.id}
-                value={item.text}
-                onChange={(e) => updateText(item.id, e.target.value)}
-                onFocus={(e) => {
-                  // Track selection for toolbar
-                  setSelectedTextId(item.id);
-                  setToolbarFontFamily(item.fontName || "Helvetica");
-                  setToolbarFontSize(Math.round(item.fontSize));
-                  setToolbarTextColor(colorToHexForInput(item.textColor));
-                  setToolbarBold(!!item.isBold);
-
-                  e.target.style.backgroundColor = activeBgColor;
-                  e.target.style.outline = "2px solid #3b82f6";
-                  e.target.style.zIndex = "50";
-                  e.target.style.color = activeTextColor;
-                }}
-                onBlur={(e) => {
-                  e.target.style.outline = "none";
-                  e.target.style.zIndex = "20";
-
-                  if (!item.hasChanged) {
-                    e.target.style.backgroundColor = "transparent";
-                    e.target.style.color = "transparent";
+          {/* Formatting Toolbar (shown when some text is focused) */}
+          {fileUrl && selectedTextId && (
+            <div className="bg-white/95 border border-slate-800/60 rounded-xl shadow-sm mb-4 flex items-center gap-3 w-full max-w-5xl px-3 py-2 mx-auto">
+              {/* Font family */}
+              <select
+                value={toolbarFontFamily}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setToolbarFontFamily(value);
+                  // Map to a reasonable CSS stack
+                  let family = "";
+                  if (value === "Times New Roman") {
+                    family = '"Times New Roman", Times, serif';
+                  } else if (value === "Courier New") {
+                    family = '"Courier New", Courier, monospace';
                   } else {
-                    // Keep the detected text color when changed
-                    e.target.style.color = activeTextColor;
+                    family = `${value}, Arial, Helvetica, sans-serif`;
                   }
+                  updateSelectedTextFormat({
+                    fontName: value,
+                    fontFamily: family,
+                  });
                 }}
-                style={{
-                  position: "absolute",
-                  left: `${htmlX}px`,
-                  top: `${htmlY}px`,
-                  width: `${effectiveWidth}px`,
-                  height: `${item.fontSize * scale * 1.25}px`,
-
-                  // Font styles from PDF - EXACT MATCHING
-                  fontSize: `${item.fontSize * scale}px`, // Exact size from PDF
-                  // Try the specific PDF font name first, then fall back to mapped family
-                  fontFamily: item.fontName
-                    ? `"${item.fontName}", ${item.fontFamily || "Arial, Helvetica, sans-serif"}`
-                    : item.fontFamily || "Arial, Helvetica, sans-serif",
-                  fontWeight: item.isBold ? "bold" : "normal", // Exact weight from PDF
-                  fontStyle: item.isItalic ? "italic" : "normal", // Exact style from PDF
-
-                  // Visual trickery with detected colors
-                  backgroundColor: showBackground ? activeBgColor : "transparent",
-                  color: showBackground ? activeTextColor : "transparent", // Exact color from PDF
-
-                  // Strip browser defaults
-                  border: "none",
-                  outline: "none",
-                  padding: 0,
-                  margin: 0,
-                  backgroundClip: "padding-box",
-                  cursor: "text",
-                  zIndex: 20,
-                }}
-                className="focus:text-black transition-colors"
-              />
-            );
-          })}
-
-          {/* Layer C: Images (Editable) */}
-          {images.map((image) => {
-            const isSelected = selectedImageId === image.id;
-            return (
-              <div
-                key={image.id}
-                onMouseDown={(e) => handleImageMouseDown(e, image.id)}
-                onMouseMove={handleImageMouseMove}
-                onMouseUp={handleImageMouseUp}
-                onMouseLeave={handleImageMouseUp}
-                style={{
-                  position: "absolute",
-                  left: `${image.x}px`,
-                  top: `${image.y}px`,
-                  width: `${image.width}px`,
-                  height: `${image.height}px`,
-                  cursor: isDragging && isSelected ? "grabbing" : "grab",
-                  zIndex: isSelected ? 30 : 15,
-                  border: isSelected ? "2px solid #3b82f6" : "2px solid transparent",
-                  boxSizing: "border-box",
-                }}
-                className="group"
+                className="px-2 py-1 border border-slate-300 rounded text-sm bg-white text-slate-900"
               >
-                <img
-                  src={image.imageData}
-                  alt="PDF Image"
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "contain",
-                    pointerEvents: "none",
+                <option value="Helvetica">Helvetica</option>
+                <option value="Arial">Arial</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="Courier New">Courier New</option>
+              </select>
+
+              {/* Font size */}
+              <input
+                type="number"
+                min={6}
+                max={72}
+                value={toolbarFontSize}
+                onChange={(e) => {
+                  const size = parseInt(e.target.value || "0", 10) || 11;
+                  setToolbarFontSize(size);
+                  updateSelectedTextFormat({ fontSize: size });
+                }}
+                className="w-16 px-2 py-1 border border-slate-300 rounded text-sm bg-white text-slate-900"
+              />
+
+              {/* Bold toggle */}
+              <button
+                onClick={() => {
+                  const nextBold = !toolbarBold;
+                  setToolbarBold(nextBold);
+                  updateSelectedTextFormat({ isBold: nextBold });
+                }}
+                className={`px-2 py-1 rounded text-sm font-bold border ${
+                  toolbarBold
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-900 border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                B
+              </button>
+
+              {/* Text color */}
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-slate-700">Text color</span>
+                <input
+                  type="color"
+                  value={toolbarTextColor}
+                  onChange={(e) => {
+                    const hex = e.target.value;
+                    setToolbarTextColor(hex);
+                    // Convert hex to rgb() string to stay compatible with saver
+                    const r = parseInt(hex.slice(1, 3), 16);
+                    const g = parseInt(hex.slice(3, 5), 16);
+                    const b = parseInt(hex.slice(5, 7), 16);
+                    const rgb = `rgb(${r}, ${g}, ${b})`;
+                    updateSelectedTextFormat({ textColor: rgb });
                   }}
+                  className="w-8 h-8 border border-slate-300 rounded cursor-pointer bg-white"
                 />
-                {isSelected && (
-                  <div className="absolute -top-8 left-0 flex gap-1 bg-white rounded shadow-lg p-1">
-                    <button
-                      onClick={() => handleImageResize(image.id, image.width * 1.1, image.height * 1.1)}
-                      className="p-1 hover:bg-gray-200 rounded"
-                      title="Resize Larger"
-                    >
-                      <Maximize2 size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleImageResize(image.id, image.width * 0.9, image.height * 0.9)}
-                      className="p-1 hover:bg-gray-200 rounded"
-                      title="Resize Smaller"
-                    >
-                      <Maximize2 size={14} className="rotate-180" />
-                    </button>
-                    <button
-                      onClick={() => handleImageDelete(image.id)}
-                      className="p-1 hover:bg-red-200 rounded text-red-600"
-                      title="Delete Image"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                )}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          )}
+
+          {/* Editor Area */}
+          {fileUrl && (
+            <div className="w-full overflow-auto flex justify-center px-2">
+              <div className="relative inline-block shadow-xl border border-gray-300 bg-white">
+                {/* Layer A: Canvas (Visuals) */}
+                <canvas ref={canvasRef} className="block" />
+
+                {/* Layer B: Inputs (Editable) with sampled background + native look */}
+                {items.map((item) => {
+                  const scale = 1.5;
+                  const { x: htmlX, y: htmlY } = pdfPointToHtmlPoint(item.x, item.y, {
+                    scale,
+                    viewportHeight: pdfDimensions.height,
+                    fontSize: item.fontSize,
+                  });
+
+                  // Calculate accurate text width using canvas measurement
+                  const scaledFontSize = item.fontSize * scale;
+                  // Extract first font name from fontFamily string (e.g., "Arial, Helvetica" -> "Arial")
+                  let fontFamilyForMeasure = item.fontName || "Arial";
+                  if (!item.fontName && item.fontFamily) {
+                    const firstFont = item.fontFamily.split(",")[0].trim().replace(/['"]/g, "");
+                    fontFamilyForMeasure = firstFont || "Arial";
+                  }
+                  const measuredWidth = measureTextWidth(item.text, scaledFontSize, fontFamilyForMeasure, item.isBold);
+
+                  // Use the larger of: original width, measured text width, or minimum 10px
+                  // Add some padding (20px) for better UX
+                  const baseWidth = item.width * scale;
+                  const effectiveWidth = Math.max(baseWidth, measuredWidth + 20, 10);
+
+                  const activeBgColor = item.backgroundColor || "transparent";
+                  // Use detected text color from PDF, fallback to black
+                  const activeTextColor =
+                    item.textColor && item.textColor !== "transparent" ? item.textColor : "#000000";
+
+                  // 2. Ghosting fix: keep opaque bg only when text changed
+                  const showBackground = item.hasChanged;
+
+                  return (
+                    <input
+                      key={item.id}
+                      value={item.text}
+                      onChange={(e) => updateText(item.id, e.target.value)}
+                      onFocus={(e) => {
+                        // Track selection for toolbar
+                        setSelectedTextId(item.id);
+                        setToolbarFontFamily(item.fontName || "Helvetica");
+                        setToolbarFontSize(Math.round(item.fontSize));
+                        setToolbarTextColor(colorToHexForInput(item.textColor));
+                        setToolbarBold(!!item.isBold);
+
+                        e.target.style.backgroundColor = activeBgColor;
+                        e.target.style.outline = "2px solid #3b82f6";
+                        e.target.style.zIndex = "50";
+                        e.target.style.color = activeTextColor;
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.outline = "none";
+                        e.target.style.zIndex = "20";
+
+                        if (!item.hasChanged) {
+                          e.target.style.backgroundColor = "transparent";
+                          e.target.style.color = "transparent";
+                        } else {
+                          // Keep the detected text color when changed
+                          e.target.style.color = activeTextColor;
+                        }
+                      }}
+                      style={{
+                        position: "absolute",
+                        left: `${htmlX}px`,
+                        top: `${htmlY}px`,
+                        width: `${effectiveWidth}px`,
+                        height: `${item.fontSize * scale * 1.25}px`,
+
+                        // Font styles from PDF - EXACT MATCHING
+                        fontSize: `${item.fontSize * scale}px`, // Exact size from PDF
+                        // Try the specific PDF font name first, then fall back to mapped family
+                        fontFamily: item.fontName
+                          ? `"${item.fontName}", ${item.fontFamily || "Arial, Helvetica, sans-serif"}`
+                          : item.fontFamily || "Arial, Helvetica, sans-serif",
+                        fontWeight: item.isBold ? "bold" : "normal", // Exact weight from PDF
+                        fontStyle: item.isItalic ? "italic" : "normal", // Exact style from PDF
+
+                        // Visual trickery with detected colors
+                        backgroundColor: showBackground ? activeBgColor : "transparent",
+                        color: showBackground ? activeTextColor : "transparent", // Exact color from PDF
+
+                        // Strip browser defaults
+                        border: "none",
+                        outline: "none",
+                        padding: 0,
+                        margin: 0,
+                        backgroundClip: "padding-box",
+                        cursor: "text",
+                        zIndex: 20,
+                      }}
+                      className="focus:text-black transition-colors"
+                    />
+                  );
+                })}
+
+                {/* Layer C: Images (Editable) */}
+                {images.map((image) => {
+                  const isSelected = selectedImageId === image.id;
+                  return (
+                    <div
+                      key={image.id}
+                      onMouseDown={(e) => handleImageMouseDown(e, image.id)}
+                      onMouseMove={handleImageMouseMove}
+                      onMouseUp={handleImageMouseUp}
+                      onMouseLeave={handleImageMouseUp}
+                      style={{
+                        position: "absolute",
+                        left: `${image.x}px`,
+                        top: `${image.y}px`,
+                        width: `${image.width}px`,
+                        height: `${image.height}px`,
+                        cursor: isDragging && isSelected ? "grabbing" : "grab",
+                        zIndex: isSelected ? 30 : 15,
+                        border: isSelected ? "2px solid #3b82f6" : "2px solid transparent",
+                        boxSizing: "border-box",
+                      }}
+                      className="group"
+                    >
+                      <img
+                        src={image.imageData}
+                        alt="PDF Image"
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "contain",
+                          pointerEvents: "none",
+                        }}
+                      />
+                      {isSelected && (
+                        <div className="absolute -top-8 left-0 flex gap-1 bg-white rounded shadow-lg p-1">
+                          <button
+                            onClick={() => handleImageResize(image.id, image.width * 1.1, image.height * 1.1)}
+                            className="p-1 hover:bg-gray-200 rounded"
+                            title="Resize Larger"
+                          >
+                            <Maximize2 size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleImageResize(image.id, image.width * 0.9, image.height * 0.9)}
+                            className="p-1 hover:bg-gray-200 rounded"
+                            title="Resize Smaller"
+                          >
+                            <Maximize2 size={14} className="rotate-180" />
+                          </button>
+                          <button
+                            onClick={() => handleImageDelete(image.id)}
+                            className="p-1 hover:bg-red-200 rounded text-red-600"
+                            title="Delete Image"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
       )}
+
+      {/* CV DESIGNER MODE */}
+      {!isPdfMode && <CvDesigner initialTemplate={initialTemplate} />}
     </div>
   );
 }

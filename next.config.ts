@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Next 16 enables Turbopack by default; this project relies on a webpack config
+  // for pdfjs-dist/browser fallbacks, so we opt into webpack explicitly.
+  turbopack: {},
   webpack: (config) => {
     // 1. Ignore node-canvas (it's for Node.js, not browser)
     config.resolve.alias.canvas = false;

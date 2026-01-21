@@ -3,6 +3,11 @@
 import dynamic from "next/dynamic";
 import { useState, useEffect } from "react";
 
+type PdfEditorClientProps = {
+  initialTemplate?: string;
+  initialMode?: "pdf" | "cv";
+};
+
 // Dynamically import PdfEditor with SSR disabled so pdfjs-dist only loads in the browser
 const PdfEditor = dynamic(() => import("./PdfEditor"), {
   ssr: false,
@@ -13,7 +18,7 @@ const PdfEditor = dynamic(() => import("./PdfEditor"), {
   ),
 });
 
-export default function PdfEditorClient() {
+export default function PdfEditorClient({ initialTemplate, initialMode }: PdfEditorClientProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -29,6 +34,7 @@ export default function PdfEditorClient() {
     );
   }
 
-  return <PdfEditor />;
+  return <PdfEditor initialTemplate={initialTemplate} initialMode={initialMode} />;
 }
+
 
