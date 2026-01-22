@@ -2,6 +2,11 @@
   "name": "pdf-editor",
   "version": "0.1.0",
   "private": true,
+  "author": {
+    "name": "AttaUrRehman",
+    "url": "https://github.com/AttaUrRehman121",
+    "linkedin": "https://www.linkedin.com/in/atta-ur-rehman62/"
+  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",

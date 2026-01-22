@@ -317,6 +317,35 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Footer */}
+      <footer className="bg-slate-950 border-t border-slate-800/80">
+        <div className="max-w-6xl mx-auto px-6 md:px-12 lg:px-20 py-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-slate-400">
+            <div className="text-center md:text-left">
+              <p>© 2026 AttaUrRehman. All rights reserved.</p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <a
+                href="https://www.linkedin.com/in/atta-ur-rehman62/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-teal-400 transition-colors"
+              >
+                LinkedIn
+              </a>
+              <a
+                href="https://github.com/AttaUrRehman121"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-teal-400 transition-colors"
+              >
+                GitHub
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }
