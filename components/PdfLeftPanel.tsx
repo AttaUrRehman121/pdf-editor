@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Upload, Image as ImageIcon, Type, FileText, Settings, Smile } from "lucide-react";
+import { Upload, Image as ImageIcon, FileText, Settings, Smile, AlignLeft } from "lucide-react";
 import { EmojiIconPicker } from "@/components/EmojiIconPicker";
 
 type PdfLeftTab = "upload" | "text" | "images" | "emojis" | "tools";
@@ -36,7 +36,7 @@ export function PdfLeftPanel(props: {
           }`}
           title="Text Tools"
         >
-          <Type size={18} />
+          <AlignLeft size={18} />
         </button>
         <button
           onClick={() => onChangeTab("images")}

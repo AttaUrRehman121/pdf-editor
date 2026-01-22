@@ -11,8 +11,7 @@ import {
   Building, Code2, GitBranch, GitCommit, GitMerge, GitPullRequest, 
   BarChart, LineChart, PieChart, TrendingDown, Activity,
   FileCheck, FileX, FileEdit, FileSearch, Download, Upload, Share2, Link, ExternalLink,
-  Copy, Clipboard, ClipboardCheck, Scissors, Edit, PenTool, Type, AlignLeft, AlignCenter,
-  AlignRight, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Image, Film,
+  Copy, Clipboard, ClipboardCheck, Scissors, Edit, Image, Film,
   Play, Pause, Settings, Cog, Wrench, Hammer, Search, Filter, Bell, Eye, EyeOff,
   User, UserCheck, UserPlus, UserMinus, UserX, UserCircle, MessageCircle, MessageSquare,
   Send, Inbox, Trash2, Save, RefreshCw, RotateCw, RotateCcw, Repeat, Shuffle,
@@ -27,10 +26,8 @@ import {
   Gift, Trophy, Medal, Crown, Gem, Diamond, Coins, Wallet, CreditCard, Receipt,
   ShoppingCart, Package, Box, Archive, Folder, FolderOpen, File, Palette, Paintbrush,
   Brush, Eraser, Unlock, Building2, Factory, Hotel,
-  Hospital, University, Library, Bookmark, BookmarkCheck, BookmarkPlus, BookmarkMinus,
-  BookmarkX, Notebook, NotebookPen, NotebookTabs, StickyNote, FileStack, Files,
-  PackageSearch, PackageCheck, PackageX, PackagePlus, PackageMinus, Boxes, Warehouse,
-  Store, ShoppingBag, ShoppingBasket
+  Hospital, University, Library, Bookmark, Notebook, StickyNote, Files,
+  Boxes, Warehouse, Store, ShoppingBag, ShoppingBasket
 } from "lucide-react";
 
 type EmojiIconPickerProps = {
