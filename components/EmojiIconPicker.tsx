@@ -9,7 +9,7 @@ import {
   Key, FileText, FileCode, Terminal, Cpu, HardDrive, Wifi, Monitor, Smartphone, 
   Tablet, Laptop, Camera, Video, Mic, Headphones, Music, Book, BookOpen, School, 
   Building, Code2, GitBranch, GitCommit, GitMerge, GitPullRequest, 
-  BarChart, LineChart, PieChart, TrendingDown, Activity, Pulse,
+  BarChart, LineChart, PieChart, TrendingDown, Activity,
   FileCheck, FileX, FileEdit, FileSearch, Download, Upload, Share2, Link, ExternalLink,
   Copy, Clipboard, ClipboardCheck, Scissors, Edit, PenTool, Type, AlignLeft, AlignCenter,
   AlignRight, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Image, Film,
@@ -79,7 +79,6 @@ const ICON_CATEGORIES = {
     { name: "Trending Up", icon: TrendingUp, emoji: "📈" },
     { name: "Trending Down", icon: TrendingDown, emoji: "📉" },
     { name: "Activity", icon: Activity, emoji: "📊" },
-    { name: "Pulse", icon: Pulse, emoji: "💓" },
   ],
   "Education": [
     { name: "Graduation Cap", icon: GraduationCap, emoji: "🎓" },
