@@ -34,6 +34,9 @@ export interface ImageItem {
   height: number;
   imageData: string; // Base64 or blob URL
   imageBytes?: Uint8Array; // For saving to PDF
+  rotation?: number; // Rotation in degrees (0-360)
+  opacity?: number; // Opacity 0-1 (default 1)
+  borderRadius?: number; // Border radius in pixels (default 0)
 }
 
 export interface PdfToHtmlOptions {
@@ -124,12 +127,14 @@ export const pdfPointToHtmlPoint = (
 };
 
 export const extractTextFromPDF = async (
-  fileUrl: string
+  fileUrl: string,
+  pageNumber: number = 1
 ): Promise<{
   items: TextItem[];
   width: number;
   height: number;
   originalPdfBytes: ArrayBuffer;
+  totalPages: number;
 }> => {
   // 1. Use pdfjsLib directly (already imported at top of file)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -138,7 +143,8 @@ export const extractTextFromPDF = async (
   // 2. Load the PDF
   const loadingTask = lib.getDocument(fileUrl);
   const pdf = await loadingTask.promise;
-  const page = await pdf.getPage(1); // Focusing on Page 1 for this MVP
+  const totalPages = pdf.numPages;
+  const page = await pdf.getPage(pageNumber);
   const viewport = page.getViewport({ scale: 1.5 }); // Scale 1.5 for better readability
 
   // 3. Get Text Content
@@ -197,31 +203,44 @@ export const extractTextFromPDF = async (
     width: viewport.width,
     height: viewport.height,
     originalPdfBytes: buffer,
+    totalPages,
   };
 };
+
+export interface WatermarkSettings {
+  enabled: boolean;
+  text: string;
+  fontSize: number;
+  opacity: number;
+  rotation: number;
+  position: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "diagonal";
+  color: string;
+}
 
 export const saveModifiedPDF = async (
   originalPdfBytes: ArrayBuffer,
   textItems: TextItem[],
-  imageItems: ImageItem[] = []
+  imageItems: ImageItem[] = [],
+  editedPageNumber: number = 1,
+  watermark?: WatermarkSettings
 ): Promise<Uint8Array> => {
   const pdfDoc = await PDFDocument.load(originalPdfBytes);
   const pages = pdfDoc.getPages();
-  const firstPage = pages[0];
-  const { height } = firstPage.getSize();
+  const editedPage = pages[editedPageNumber - 1]; // pages are 0-indexed
+  const { height } = editedPage.getSize();
 
   // Load a standard font (Complex font matching requires custom font loading)
   const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const helveticaBoldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  // Save text changes
+  // Save text changes to the edited page
   textItems.forEach((item) => {
     if (item.hasChanged) {
       // Derive background fill from sampled background (fallback white)
       const bgColor = parseColorToRgbUnit(item.backgroundColor, { r: 1, g: 1, b: 1 });
 
       // 1. Whiteout the original text area
-      firstPage.drawRectangle({
+      editedPage.drawRectangle({
         x: item.x,
         y: item.y - item.height * 0.2, // Slight adjustment for baseline
         width: item.width * 1.5, // Widen to ensure coverage
@@ -235,7 +254,7 @@ export const saveModifiedPDF = async (
       const textColorRgb = isAlmostWhite ? { r: 0, g: 0, b: 0 } : parsedText;
 
       // 3. Draw the new text with correct font weight
-      firstPage.drawText(item.text, {
+      editedPage.drawText(item.text, {
         x: item.x,
         // NOTE: pdf-lib uses PDF coordinate space (bottom-left origin). We keep raw PDF coords.
         y: item.y,
@@ -246,12 +265,12 @@ export const saveModifiedPDF = async (
     }
   });
 
-  // Save images
+  // Save images to the edited page
   for (const imageItem of imageItems) {
     if (imageItem.imageBytes) {
       try {
         const image = await pdfDoc.embedPng(imageItem.imageBytes);
-        firstPage.drawImage(image, {
+        editedPage.drawImage(image, {
           x: imageItem.x,
           // NOTE: imageItem.{x,y,width,height} are expected to already be in PDF coordinates
           // with bottom-left origin for y.
@@ -264,7 +283,7 @@ export const saveModifiedPDF = async (
         // Try JPEG if PNG fails
         try {
           const image = await pdfDoc.embedJpg(imageItem.imageBytes);
-          firstPage.drawImage(image, {
+          editedPage.drawImage(image, {
             x: imageItem.x,
             y: imageItem.y,
             width: imageItem.width,
@@ -274,6 +293,69 @@ export const saveModifiedPDF = async (
           console.error("Error embedding JPEG:", jpegError);
         }
       }
+    }
+  }
+
+  // Apply watermark to all pages if enabled
+  if (watermark?.enabled && watermark.text) {
+    const watermarkFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const color = parseColorToRgbUnit(watermark.color, { r: 0.5, g: 0.5, b: 0.5 });
+    
+    // Apply watermark to all pages
+    for (const page of pages) {
+      const { width, height } = page.getSize();
+      
+      // Calculate watermark position
+      let x = width / 2;
+      let y = height / 2;
+      const textWidth = watermarkFont.widthOfTextAtSize(watermark.text, watermark.fontSize);
+      
+      switch (watermark.position) {
+        case "top-left":
+          x = 50;
+          y = height - 50;
+          break;
+        case "top-right":
+          x = width - textWidth - 50;
+          y = height - 50;
+          break;
+        case "bottom-left":
+          x = 50;
+          y = 50;
+          break;
+        case "bottom-right":
+          x = width - textWidth - 50;
+          y = 50;
+          break;
+        case "diagonal":
+          // Center with rotation
+          x = (width - textWidth) / 2;
+          y = height / 2;
+          break;
+        case "center":
+        default:
+          x = (width - textWidth) / 2;
+          y = height / 2;
+          break;
+      }
+
+      // Convert y to PDF coordinates (bottom-left origin)
+      const pdfY = watermark.position === "bottom-left" || watermark.position === "bottom-right" 
+        ? y 
+        : height - y;
+
+      // pdf-lib's drawText doesn't support rotation directly.
+      // Rotation for text requires low-level PDF operators which are not easily accessible
+      // through pdf-lib's high-level API. For now, we'll draw without rotation.
+      // If rotation is needed, it would require using the content stream directly.
+      page.drawText(watermark.text, {
+        x,
+        y: pdfY,
+        size: watermark.fontSize,
+        font: watermarkFont,
+        color: rgb(color.r, color.g, color.b),
+        opacity: watermark.opacity,
+      });
     }
   }
 

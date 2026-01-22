@@ -260,6 +260,20 @@ export function CanvasStage(props: {
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseLeave={onMouseUp}
+      onClick={(e) => {
+        // Deselect when clicking outside the page element
+        const target = e.target as HTMLElement;
+        const pageElement = pageRef.current;
+        
+        // Check if click is outside the page element (on the gray background)
+        if (pageElement && !pageElement.contains(target)) {
+          onSelect(null);
+        }
+        // Also deselect if clicking directly on the container itself
+        else if (target === e.currentTarget) {
+          onSelect(null);
+        }
+      }}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
@@ -398,7 +412,17 @@ export function CanvasStage(props: {
         }
       }}
     >
-      <div className="min-h-full min-w-full flex items-start justify-center p-10">
+      <div 
+        className="min-h-full min-w-full flex items-start justify-center p-10"
+        onClick={(e) => {
+          // Deselect when clicking on the padding area (outside page but inside container)
+          const target = e.target as HTMLElement;
+          const pageElement = pageRef.current;
+          if (pageElement && !pageElement.contains(target) && target === e.currentTarget) {
+            onSelect(null);
+          }
+        }}
+      >
         <div
           ref={pageRef}
           className="relative bg-white shadow-2xl border border-gray-200"
@@ -409,7 +433,15 @@ export function CanvasStage(props: {
           }}
           onMouseDown={(e) => {
             // click empty -> deselect
-            if (e.target === e.currentTarget) onSelect(null);
+            if (e.target === e.currentTarget) {
+              onSelect(null);
+            }
+          }}
+          onClick={(e) => {
+            // Also deselect on click (not just mousedown) for better UX
+            if (e.target === e.currentTarget) {
+              onSelect(null);
+            }
           }}
         >
           <div
@@ -442,6 +474,11 @@ export function CanvasStage(props: {
                     height: el.height,
                     cursor: locked ? "not-allowed" : draggingId === el.id ? "grabbing" : "grab",
                   }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (locked) return;
+                    onSelect(el.id);
+                  }}
                   onMouseDown={(e) => {
                     e.stopPropagation();
                     if (locked) return;
@@ -460,6 +497,19 @@ export function CanvasStage(props: {
                         backgroundColor: el.fill,
                         borderRadius: el.borderRadius ?? 0,
                       }}
+                    />
+                  ) : el.type === "image" ? (
+                    <img
+                      src={el.imageData}
+                      alt="CV Image"
+                      className="w-full h-full object-contain"
+                      style={{
+                        transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+                        opacity: el.opacity ?? 1,
+                        pointerEvents: "none",
+                        userSelect: "none",
+                      }}
+                      draggable={false}
                     />
                   ) : (
                     <div
@@ -480,7 +530,7 @@ export function CanvasStage(props: {
                               ? ({
                                   ...it,
                                   text: nextText,
-                                  height: Math.max(it.height, computeAutoHeight(nextText, it.fontSize)),
+                                  height: computeAutoHeight(nextText, it.fontSize),
                                 } as CvElement)
                               : it
                           )
@@ -494,7 +544,7 @@ export function CanvasStage(props: {
                               ? ({
                                   ...it,
                                   text: nextText,
-                                  height: Math.max(it.height, computeAutoHeight(nextText, it.fontSize)),
+                                  height: computeAutoHeight(nextText, it.fontSize),
                                 } as CvElement)
                               : it
                           )
@@ -527,7 +577,7 @@ export function CanvasStage(props: {
                                 ? ({
                                     ...it,
                                     text: nextText,
-                                    height: Math.max(it.height, computeAutoHeight(nextText, it.fontSize)),
+                                    height: computeAutoHeight(nextText, it.fontSize),
                                   } as CvElement)
                                 : it
                             )

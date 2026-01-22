@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { LayoutTemplate, Shapes, Type, Smile } from "lucide-react";
+import { LayoutTemplate, Shapes, Type, Smile, Image as ImageIcon, Settings } from "lucide-react";
 import type { CvElement } from "@/lib/cv-model";
-import { addBodyTextElement, addShapeElement, addTextElement } from "@/lib/cv-model";
+import { addBodyTextElement, addShapeElement, addTextElement, addImageElement } from "@/lib/cv-model";
 import { EmojiIconPicker } from "@/components/EmojiIconPicker";
 import {
   makeModernTemplate,
@@ -23,14 +23,26 @@ import {
 
 import type { LeftTab } from "./CvDesigner";
 
+export interface WatermarkSettings {
+  enabled: boolean;
+  text: string;
+  fontSize: number;
+  opacity: number;
+  rotation: number;
+  position: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "diagonal";
+  color: string;
+}
+
 export function LeftPanel(props: {
   tab: LeftTab;
   onChangeTab: (t: LeftTab) => void;
   onClearCanvas: () => void;
   onApplyTemplate: (elements: CvElement[]) => void;
   onAddElements: (elements: CvElement[]) => void;
+  watermark: WatermarkSettings;
+  onWatermarkChange: (watermark: WatermarkSettings) => void;
 }) {
-  const { tab, onChangeTab, onClearCanvas, onApplyTemplate, onAddElements } = props;
+  const { tab, onChangeTab, onClearCanvas, onApplyTemplate, onAddElements, watermark, onWatermarkChange } = props;
 
   return (
     <div className="flex border-r border-gray-200 bg-white">
@@ -71,6 +83,15 @@ export function LeftPanel(props: {
           title="Emojis & Icons"
         >
           <Smile size={18} />
+        </button>
+        <button
+          onClick={() => onChangeTab("settings")}
+          className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            tab === "settings" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"
+          }`}
+          title="Settings"
+        >
+          <Settings size={18} />
         </button>
       </div>
 
@@ -231,6 +252,61 @@ export function LeftPanel(props: {
                 <div className="text-sm font-medium text-gray-900">Line</div>
                 <div className="text-xs text-gray-700">Thin separator line</div>
               </button>
+              
+              <div className="pt-2 border-t border-gray-100">
+                <label className="w-full cursor-pointer">
+                  <div className="w-full px-3 py-3 rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-center transition-colors">
+                    <ImageIcon size={20} className="mx-auto mb-1 text-gray-400" />
+                    <div className="text-sm font-medium text-gray-900">Upload Photo</div>
+                    <div className="text-xs text-gray-500">Add image to canvas</div>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        const imageData = event.target?.result as string;
+                        const img = new Image();
+                        img.onload = () => {
+                          const page = { id: crypto.randomUUID(), elements: [] };
+                          const aspectRatio = img.width / img.height;
+                          const maxWidth = 300;
+                          const maxHeight = 300;
+                          let width = img.width;
+                          let height = img.height;
+                          
+                          if (width > maxWidth) {
+                            width = maxWidth;
+                            height = width / aspectRatio;
+                          }
+                          if (height > maxHeight) {
+                            height = maxHeight;
+                            width = height * aspectRatio;
+                          }
+                          
+                          const next = addImageElement(page, {
+                            imageData,
+                            width,
+                            height,
+                            x: 100,
+                            y: 100,
+                            zIndex: 10,
+                          });
+                          onAddElements(next.elements);
+                        };
+                        img.src = imageData;
+                      };
+                      reader.readAsDataURL(file);
+                      e.target.value = ""; // Reset input
+                    }}
+                  />
+                </label>
+              </div>
             </div>
           </div>
         )}
@@ -372,6 +448,118 @@ export function LeftPanel(props: {
                 onAddElements(next.elements);
               }}
             />
+          </div>
+        )}
+
+        {tab === "settings" && (
+          <div className="space-y-4">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Tools & Settings</div>
+              <div className="text-xs text-gray-500">CV designer options</div>
+            </div>
+            
+            {/* Watermark Settings */}
+            <div className="px-3 py-3 rounded-lg border border-gray-200 bg-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs font-semibold text-gray-900">Watermark</div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={watermark.enabled}
+                    onChange={(e) => onWatermarkChange({ ...watermark, enabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              
+              {watermark.enabled && (
+                <div className="space-y-3 mt-3">
+                  <label className="text-xs text-gray-600 block">
+                    Watermark Text
+                    <input
+                      type="text"
+                      value={watermark.text}
+                      onChange={(e) => onWatermarkChange({ ...watermark, text: e.target.value })}
+                      placeholder="e.g., CONFIDENTIAL, DRAFT"
+                      className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                    />
+                  </label>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs text-gray-600">
+                      Font Size
+                      <input
+                        type="number"
+                        min={12}
+                        max={120}
+                        value={watermark.fontSize}
+                        onChange={(e) => onWatermarkChange({ ...watermark, fontSize: parseInt(e.target.value || "48", 10) })}
+                        className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                      />
+                    </label>
+                    <label className="text-xs text-gray-600">
+                      Opacity (%)
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={Math.round(watermark.opacity * 100)}
+                        onChange={(e) => onWatermarkChange({ ...watermark, opacity: parseFloat(e.target.value || "30") / 100 })}
+                        className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                      />
+                    </label>
+                  </div>
+                  
+                  <label className="text-xs text-gray-600 block">
+                    Rotation (degrees)
+                    <input
+                      type="number"
+                      min={-180}
+                      max={180}
+                      value={watermark.rotation}
+                      onChange={(e) => onWatermarkChange({ ...watermark, rotation: parseFloat(e.target.value || "0") })}
+                      className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                    />
+                  </label>
+                  
+                  <label className="text-xs text-gray-600 block">
+                    Position
+                    <select
+                      value={watermark.position}
+                      onChange={(e) => onWatermarkChange({ ...watermark, position: e.target.value as WatermarkSettings["position"] })}
+                      className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                    >
+                      <option value="center">Center</option>
+                      <option value="diagonal">Diagonal</option>
+                      <option value="top-left">Top Left</option>
+                      <option value="top-right">Top Right</option>
+                      <option value="bottom-left">Bottom Left</option>
+                      <option value="bottom-right">Bottom Right</option>
+                    </select>
+                  </label>
+                  
+                  <label className="text-xs text-gray-600 block">
+                    Color
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={watermark.color}
+                        onChange={(e) => onWatermarkChange({ ...watermark, color: e.target.value })}
+                        className="w-10 h-9 border border-gray-200 rounded"
+                      />
+                      <input
+                        type="text"
+                        value={watermark.color}
+                        onChange={(e) => onWatermarkChange({ ...watermark, color: e.target.value })}
+                        className="flex-1 text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                        placeholder="#000000"
+                      />
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -10,11 +10,18 @@ import { CanvasStage } from "./CanvasStage";
 import { RightInspector } from "./RightInspector";
 import { makeModernTemplate } from "@/lib/cv-templates";
 
-export type LeftTab = "text" | "elements" | "templates" | "emojis";
+export type LeftTab = "text" | "elements" | "templates" | "emojis" | "settings";
 
 type CvDesignerProps = {
   initialTemplate?: string;
 };
+
+function computeAutoHeight(text: string, fontSize: number) {
+  const lineHeight = fontSize * 1.35;
+  const lines = Math.max(1, text.split("\n").length);
+  const paddingY = 8; // px (matches px-2 py-1-ish)
+  return Math.ceil(lines * lineHeight + paddingY);
+}
 
 export function CvDesigner({ initialTemplate }: CvDesignerProps) {
   const [doc, setDoc] = useState<CvDocument>(() => newDocument("A4"));
@@ -69,8 +76,27 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
     setSelectedId(null);
   };
 
+  // Watermark state
+  const [watermark, setWatermark] = useState<{
+    enabled: boolean;
+    text: string;
+    fontSize: number;
+    opacity: number;
+    rotation: number;
+    position: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "diagonal";
+    color: string;
+  }>({
+    enabled: false,
+    text: "CONFIDENTIAL",
+    fontSize: 48,
+    opacity: 0.3,
+    rotation: -45,
+    position: "diagonal",
+    color: "#808080",
+  });
+
   const handleExportPdf = async () => {
-    const bytes = await exportCvToPdf(doc, pageDims.width, pageDims.height);
+    const bytes = await exportCvToPdf(doc, pageDims.width, pageDims.height, watermark);
     downloadPdfBytes(bytes, "cv.pdf");
   };
 
@@ -192,6 +218,14 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
                 if (Object.prototype.hasOwnProperty.call(updates, "listStyle")) {
                   nextEl.text = applyListStyleToText(el.text, (updates as any).listStyle);
                 }
+                
+                // Recalculate height if fontSize or text changes
+                if (Object.prototype.hasOwnProperty.call(updates, "fontSize") || Object.prototype.hasOwnProperty.call(updates, "text")) {
+                  const newText = nextEl.text !== undefined ? nextEl.text : el.text;
+                  const newFontSize = nextEl.fontSize !== undefined ? nextEl.fontSize : el.fontSize;
+                  nextEl.height = computeAutoHeight(newText, newFontSize);
+                }
+                
                 return nextEl as CvElement;
               }),
             };
@@ -232,6 +266,8 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
             const last = elements[elements.length - 1];
             if (last) setSelectedId(last.id);
           }}
+          watermark={watermark}
+          onWatermarkChange={setWatermark}
         />
 
         <CanvasStage

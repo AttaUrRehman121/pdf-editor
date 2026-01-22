@@ -13,6 +13,7 @@ import {
   Raleway,
   Playfair_Display,
 } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -95,6 +96,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         {children}
+        <Analytics />
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import { Download, Upload, Image as ImageIcon, X, Maximize2 } from "lucide-react";
+import { Download, Upload, Image as ImageIcon, X, Maximize2, RotateCw, RotateCcw } from "lucide-react";
 import { CvDesigner } from "@/components/cv/CvDesigner";
 import { PdfLeftPanel } from "@/components/PdfLeftPanel";
 import { PdfRightInspector } from "@/components/PdfRightInspector";
@@ -56,6 +56,12 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const [originalPdfBytes, setOriginalPdfBytes] = useState<ArrayBuffer | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState<string | null>(null);
+  const [totalPages, setTotalPages] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [showPageSelector, setShowPageSelector] = useState(false);
+  const [pageThumbnails, setPageThumbnails] = useState<Map<number, string>>(new Map());
+  const [frontPageThumbnail, setFrontPageThumbnail] = useState<string | null>(null);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -70,6 +76,25 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const [toolbarTextColor, setToolbarTextColor] = useState("#000000");
   const [toolbarBold, setToolbarBold] = useState(false);
 
+  // Watermark state
+  const [watermark, setWatermark] = useState<{
+    enabled: boolean;
+    text: string;
+    fontSize: number;
+    opacity: number;
+    rotation: number;
+    position: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "diagonal";
+    color: string;
+  }>({
+    enabled: false,
+    text: "CONFIDENTIAL",
+    fontSize: 48,
+    opacity: 0.3,
+    rotation: -45,
+    position: "diagonal",
+    color: "#808080",
+  });
+
   // File input refs
   const pdfInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -80,10 +105,10 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const isPdfMode = mode === "pdf";
 
   // 2. Render PDF to Canvas (Visual Background Only)
-  const renderPdfBackground = async (url: string, currentItems?: TextItem[]) => {
+  const renderPdfBackground = async (url: string, currentItems?: TextItem[], pageNum: number = currentPage) => {
     const loadingTask = (pdfjsLib as any).getDocument(url);
     const pdf = await loadingTask.promise;
-    const page = await pdf.getPage(1);
+    const page = await pdf.getPage(pageNum);
     const viewport = page.getViewport({ scale: 1.5 });
 
     const canvas = canvasRef.current;
@@ -112,7 +137,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       const maxAttempts = 20; // Max 1 second wait
       const checkAndRender = () => {
         if (canvasRef.current) {
-          renderPdfBackground(fileUrl, items);
+          renderPdfBackground(fileUrl, items, currentPage);
         } else if (attempts < maxAttempts) {
           attempts++;
           setTimeout(checkAndRender, 50);
@@ -123,6 +148,39 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     }
   }, [isPdfMode, fileUrl]); // Re-run when mode or fileUrl changes
 
+  // Generate thumbnail for a specific page
+  const generatePageThumbnail = async (url: string, pageNum: number): Promise<string> => {
+    const loadingTask = (pdfjsLib as any).getDocument(url);
+    const pdf = await loadingTask.promise;
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 0.8 }); // Larger scale for better visibility
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) return "";
+
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+
+    const renderContext = {
+      canvasContext: context,
+      viewport: viewport,
+    };
+    await page.render(renderContext).promise;
+
+    return canvas.toDataURL("image/png");
+  };
+
+  // Generate thumbnails for all pages
+  const generateAllThumbnails = async (url: string, totalPages: number) => {
+    const thumbnails = new Map<number, string>();
+    for (let i = 1; i <= totalPages; i++) {
+      const thumbnail = await generatePageThumbnail(url, i);
+      thumbnails.set(i, thumbnail);
+    }
+    setPageThumbnails(thumbnails);
+  };
+
   // 1. Handle File Upload
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -130,15 +188,49 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
 
     const url = URL.createObjectURL(file);
     setFileUrl(url);
+    setPdfFileName(file.name);
+    setCurrentPage(1);
+    setPageThumbnails(new Map());
 
-    // Extract Data
-    const { items: extractedItems, width, height, originalPdfBytes } = await extractTextFromPDF(url);
+    // Extract Data from first page to get total pages
+    const { items: extractedItems, width, height, originalPdfBytes, totalPages: pages } = await extractTextFromPDF(url, 1);
+    setTotalPages(pages);
     setItems(extractedItems);
     setPdfDimensions({ width, height });
     setOriginalPdfBytes(originalPdfBytes);
 
+    // Generate front page thumbnail immediately for display
+    const frontThumb = await generatePageThumbnail(url, 1);
+    setFrontPageThumbnail(frontThumb);
+
+    // Generate thumbnails for all pages
+    if (pages > 1) {
+      generateAllThumbnails(url, pages);
+      setShowPageSelector(true);
+    } else {
+      // Render Background Canvas and detect actual background colors
+      renderPdfBackground(url, extractedItems, 1);
+    }
+  };
+
+  // Handle page selection
+  const handlePageSelect = async (pageNum: number) => {
+    if (!fileUrl) return;
+    
+    setCurrentPage(pageNum);
+    setShowPageSelector(false);
+    setItems([]);
+    setImages([]);
+    setSelectedTextId(null);
+    setSelectedImageId(null);
+
+    // Extract Data from selected page
+    const { items: extractedItems, width, height } = await extractTextFromPDF(fileUrl, pageNum);
+    setItems(extractedItems);
+    setPdfDimensions({ width, height });
+
     // Render Background Canvas and detect actual background colors
-    renderPdfBackground(url, extractedItems);
+    renderPdfBackground(fileUrl, extractedItems, pageNum);
   };
 
   const detectBackgroundColors = (
@@ -533,7 +625,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       return { ...img, x, y, width, height };
     });
 
-    const modifiedPdfBytes = await saveModifiedPDF(originalPdfBytes, items, imagesForPdf);
+    const modifiedPdfBytes = await saveModifiedPDF(originalPdfBytes, items, imagesForPdf, currentPage, watermark);
     // Convert Uint8Array to ArrayBuffer to avoid TypeScript type issues with pdf-lib
     const arrayBuffer = modifiedPdfBytes.buffer instanceof ArrayBuffer
       ? modifiedPdfBytes.buffer.slice(modifiedPdfBytes.byteOffset, modifiedPdfBytes.byteOffset + modifiedPdfBytes.byteLength)
@@ -541,7 +633,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     const blob = new Blob([arrayBuffer], { type: "application/pdf" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "edited-document.pdf";
+    link.download = pdfFileName || "edited-document.pdf";
     link.click();
   };
 
@@ -617,6 +709,17 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
               onAddImage={handleImageUpload}
               onAddEmoji={handleAddEmoji}
               fileUrl={fileUrl}
+              pdfFileName={pdfFileName}
+              totalPages={totalPages}
+              currentPage={currentPage}
+              onFileClick={() => {
+                if (totalPages > 1) {
+                  setShowPageSelector(true);
+                }
+              }}
+              frontPageThumbnail={frontPageThumbnail}
+              watermark={watermark}
+              onWatermarkChange={setWatermark}
             />
 
             {/* Canvas Area */}
@@ -641,8 +744,24 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                     console.error("Failed to parse drop data", err);
                   }
                 }}
+                onClick={(e) => {
+                  // Deselect when clicking outside the canvas container
+                  if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === "CANVAS") {
+                    setSelectedTextId(null);
+                    setSelectedImageId(null);
+                  }
+                }}
               >
-                <div className="relative inline-block shadow-xl border border-gray-300 bg-white">
+                <div 
+                  className="relative inline-block shadow-xl border border-gray-300 bg-white"
+                  onClick={(e) => {
+                    // Deselect when clicking on the canvas container itself (but not on elements)
+                    if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === "CANVAS") {
+                      setSelectedTextId(null);
+                      setSelectedImageId(null);
+                    }
+                  }}
+                >
                   {/* Layer A: Canvas (Visuals) */}
                   <canvas ref={canvasRef} className="block" />
 
@@ -683,9 +802,20 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                       key={item.id}
                       value={item.text}
                       onChange={(e) => updateText(item.id, e.target.value)}
+                      onClick={(e) => {
+                        // Select text when clicking on it
+                        e.stopPropagation();
+                        setSelectedTextId(item.id);
+                        setSelectedImageId(null);
+                        setToolbarFontFamily(item.fontName || "Helvetica");
+                        setToolbarFontSize(Math.round(item.fontSize));
+                        setToolbarTextColor(colorToHexForInput(item.textColor));
+                        setToolbarBold(!!item.isBold);
+                      }}
                       onFocus={(e) => {
                         // Track selection for toolbar
                         setSelectedTextId(item.id);
+                        setSelectedImageId(null);
                         setToolbarFontFamily(item.fontName || "Helvetica");
                         setToolbarFontSize(Math.round(item.fontSize));
                         setToolbarTextColor(colorToHexForInput(item.textColor));
@@ -780,6 +910,9 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           objectFit: "contain",
                           pointerEvents: "none",
                           userSelect: "none",
+                          transform: image.rotation ? `rotate(${image.rotation}deg)` : undefined,
+                          opacity: image.opacity ?? 1,
+                          borderRadius: image.borderRadius ? `${image.borderRadius}px` : undefined,
                         }}
                         draggable={false}
                       />
@@ -879,6 +1012,39 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                setImages((prev) =>
+                                  prev.map((img) =>
+                                    img.id === image.id
+                                      ? { ...img, rotation: ((img.rotation || 0) - 15) % 360 }
+                                      : img
+                                  )
+                                );
+                              }}
+                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              title="Rotate left 15°"
+                            >
+                              <RotateCcw size={16} className="text-gray-700" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setImages((prev) =>
+                                  prev.map((img) =>
+                                    img.id === image.id
+                                      ? { ...img, rotation: ((img.rotation || 0) + 15) % 360 }
+                                      : img
+                                  )
+                                );
+                              }}
+                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              title="Rotate right 15°"
+                            >
+                              <RotateCw size={16} className="text-gray-700" />
+                            </button>
+                            <div className="w-px bg-gray-300 mx-1" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 handleImageDelete(image.id);
                               }}
                               className="p-1.5 hover:bg-red-100 rounded transition-colors text-red-600"
@@ -930,6 +1096,65 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
 
       {/* CV DESIGNER MODE */}
       {!isPdfMode && <CvDesigner initialTemplate={initialTemplate} />}
+
+      {/* Page Selector Modal */}
+      {showPageSelector && fileUrl && totalPages > 0 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowPageSelector(false)}>
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-6xl w-full mx-4 max-h-[95vh] overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Select Page to Edit</h2>
+                <p className="text-sm text-gray-500 mt-1">{pdfFileName}</p>
+              </div>
+              <button
+                onClick={() => setShowPageSelector(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                const thumbnail = pageThumbnails.get(pageNum);
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageSelect(pageNum)}
+                    className={`relative rounded-xl border-2 transition-all overflow-hidden group shadow-sm hover:shadow-md ${
+                      currentPage === pageNum
+                        ? "border-blue-500 bg-blue-50 ring-4 ring-blue-200 scale-105"
+                        : "border-gray-200 hover:border-blue-400 hover:bg-gray-50"
+                    }`}
+                  >
+                    {thumbnail ? (
+                      <>
+                        <img
+                          src={thumbnail}
+                          alt={`Page ${pageNum}`}
+                          className="w-full h-64 md:h-80 object-contain bg-gray-50"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors" />
+                      </>
+                    ) : (
+                      <div className="w-full h-64 md:h-80 bg-gray-100 flex items-center justify-center">
+                        <div className="text-sm text-gray-400">Loading thumbnail...</div>
+                      </div>
+                    )}
+                    <div className="p-3 bg-white border-t border-gray-200">
+                      <div className={`text-sm font-semibold ${currentPage === pageNum ? "text-blue-600" : "text-gray-900"}`}>
+                        Page {pageNum}
+                      </div>
+                      {currentPage === pageNum && (
+                        <div className="text-xs text-blue-600 mt-1 font-medium">Currently editing</div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

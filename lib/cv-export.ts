@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, degrees } from "pdf-lib";
 import type { CvDocument, CvElement, CvPageSize, CvTextElement } from "./cv-model";
 
 const PDF_PAGE_POINTS: Record<CvPageSize, { width: number; height: number }> = {
@@ -111,7 +111,22 @@ function drawTextElement(opts: {
   }
 }
 
-export async function exportCvToPdf(doc: CvDocument, canvasWidth: number, canvasHeight: number) {
+export interface WatermarkSettings {
+  enabled: boolean;
+  text: string;
+  fontSize: number;
+  opacity: number;
+  rotation: number;
+  position: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "diagonal";
+  color: string;
+}
+
+export async function exportCvToPdf(
+  doc: CvDocument,
+  canvasWidth: number,
+  canvasHeight: number,
+  watermark?: WatermarkSettings
+) {
   const pdfDoc = await PDFDocument.create();
   const { width: pdfWidth, height: pdfHeight } = PDF_PAGE_POINTS[doc.pageSize];
 
@@ -142,6 +157,60 @@ export async function exportCvToPdf(doc: CvDocument, canvasWidth: number, canvas
           height: h,
           color: rgb(fill01.r, fill01.g, fill01.b),
         });
+      } else if (el.type === "image") {
+        // Handle image elements
+        let imageBytes = el.imageBytes;
+        
+        // Convert base64 imageData to bytes if needed
+        if (!imageBytes && el.imageData) {
+          try {
+            const response = await fetch(el.imageData);
+            const blob = await response.blob();
+            imageBytes = new Uint8Array(await blob.arrayBuffer());
+          } catch (error) {
+            console.error("Error converting image data:", error);
+          }
+        }
+        
+        if (imageBytes) {
+          try {
+            const image = await pdfDoc.embedPng(imageBytes);
+            const x = el.x * scaleX;
+            const y = pdfHeight - (el.y + el.height) * scaleY;
+            const w = el.width * scaleX;
+            const h = el.height * scaleY;
+            
+            page.drawImage(image, {
+              x,
+              y,
+              width: w,
+              height: h,
+              opacity: el.opacity ?? 1,
+              rotate: degrees(el.rotation || 0),
+            });
+          } catch (error) {
+            console.error("Error embedding image:", error);
+            // Try JPEG if PNG fails
+            try {
+              const image = await pdfDoc.embedJpg(imageBytes);
+              const x = el.x * scaleX;
+              const y = pdfHeight - (el.y + el.height) * scaleY;
+              const w = el.width * scaleX;
+              const h = el.height * scaleY;
+              
+              page.drawImage(image, {
+                x,
+                y,
+                width: w,
+                height: h,
+                opacity: el.opacity ?? 1,
+                rotate: degrees(el.rotation || 0),
+              });
+            } catch (jpegError) {
+              console.error("Error embedding JPEG:", jpegError);
+            }
+          }
+        }
       } else {
         drawTextElement({
           page,
@@ -153,6 +222,69 @@ export async function exportCvToPdf(doc: CvDocument, canvasWidth: number, canvas
           fontBold,
         });
       }
+    }
+  }
+
+  // Apply watermark to all pages if enabled
+  if (watermark?.enabled && watermark.text) {
+    const watermarkFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const color = parseColorToRgb01(watermark.color, { r: 0.5, g: 0.5, b: 0.5 });
+    
+    // Apply watermark to all pages
+    for (let i = 0; i < pdfDoc.getPageCount(); i++) {
+      const page = pdfDoc.getPage(i);
+      const { width, height } = page.getSize();
+      
+      // Calculate watermark position
+      let x = width / 2;
+      let y = height / 2;
+      const textWidth = watermarkFont.widthOfTextAtSize(watermark.text, watermark.fontSize);
+      
+      switch (watermark.position) {
+        case "top-left":
+          x = 50;
+          y = height - 50;
+          break;
+        case "top-right":
+          x = width - textWidth - 50;
+          y = height - 50;
+          break;
+        case "bottom-left":
+          x = 50;
+          y = 50;
+          break;
+        case "bottom-right":
+          x = width - textWidth - 50;
+          y = 50;
+          break;
+        case "diagonal":
+          x = (width - textWidth) / 2;
+          y = height / 2;
+          break;
+        case "center":
+        default:
+          x = (width - textWidth) / 2;
+          y = height / 2;
+          break;
+      }
+
+      // Convert y to PDF coordinates (bottom-left origin)
+      const pdfY = watermark.position === "bottom-left" || watermark.position === "bottom-right" 
+        ? y 
+        : height - y;
+
+      // pdf-lib's drawText doesn't support rotation directly.
+      // Rotation for text requires low-level PDF operators which are not easily accessible
+      // through pdf-lib's high-level API. For now, we'll draw without rotation.
+      // If rotation is needed, it would require using the content stream directly.
+      page.drawText(watermark.text, {
+        x,
+        y: pdfY,
+        size: watermark.fontSize,
+        font: watermarkFont,
+        color: rgb(color.r, color.g, color.b),
+        opacity: watermark.opacity,
+      });
     }
   }
 

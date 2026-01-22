@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { RotateCw, RotateCcw } from "lucide-react";
 import type { CvElement } from "@/lib/cv-model";
 
 export function RightInspector(props: {
@@ -115,6 +116,63 @@ export function RightInspector(props: {
                   className="mt-1 w-full text-xs border border-gray-200 rounded-md px-2 py-1"
                 />
                 <div className="text-[11px] text-gray-500">Enter px value (0–500)</div>
+              </label>
+            </>
+          )}
+
+          {selected.type === "image" && (
+            <>
+              <label className="text-xs text-gray-600 block">
+                Rotation
+                <div className="mt-1 flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      onChange({ rotation: ((selected.rotation || 0) - 15) % 360 } as Partial<CvElement>)
+                    }
+                    className="p-1.5 border border-gray-300 rounded hover:bg-gray-100"
+                    title="Rotate left 15°"
+                  >
+                    <RotateCcw size={16} className="text-gray-700" />
+                  </button>
+                  <input
+                    type="number"
+                    min={0}
+                    max={360}
+                    value={Math.round(selected.rotation || 0)}
+                    onChange={(e) =>
+                      onChange({ rotation: parseFloat(e.target.value || "0") % 360 } as Partial<CvElement>)
+                    }
+                    className="flex-1 text-xs border border-gray-200 rounded-md px-2 py-1"
+                  />
+                  <span className="text-xs text-gray-500">°</span>
+                  <button
+                    onClick={() =>
+                      onChange({ rotation: ((selected.rotation || 0) + 15) % 360 } as Partial<CvElement>)
+                    }
+                    className="p-1.5 border border-gray-300 rounded hover:bg-gray-100"
+                    title="Rotate right 15°"
+                  >
+                    <RotateCw size={16} className="text-gray-700" />
+                  </button>
+                </div>
+              </label>
+              <label className="text-xs text-gray-600 block">
+                Opacity
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round((selected.opacity ?? 1) * 100)}
+                    onChange={(e) =>
+                      onChange({ opacity: parseFloat(e.target.value) / 100 } as Partial<CvElement>)
+                    }
+                    className="flex-1"
+                  />
+                  <span className="text-xs text-gray-500 w-12 text-right">
+                    {Math.round((selected.opacity ?? 1) * 100)}%
+                  </span>
+                </div>
               </label>
             </>
           )}

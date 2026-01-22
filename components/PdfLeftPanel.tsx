@@ -6,6 +6,16 @@ import { EmojiIconPicker } from "@/components/EmojiIconPicker";
 
 type PdfLeftTab = "upload" | "text" | "images" | "emojis" | "tools";
 
+export interface WatermarkSettings {
+  enabled: boolean;
+  text: string;
+  fontSize: number;
+  opacity: number;
+  rotation: number;
+  position: "center" | "top-left" | "top-right" | "bottom-left" | "bottom-right" | "diagonal";
+  color: string;
+}
+
 export function PdfLeftPanel(props: {
   tab: PdfLeftTab;
   onChangeTab: (t: PdfLeftTab) => void;
@@ -13,8 +23,15 @@ export function PdfLeftPanel(props: {
   onAddImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onAddEmoji: (emoji: string, x: number, y: number) => void;
   fileUrl: string | null;
+  pdfFileName: string | null;
+  totalPages: number;
+  currentPage: number;
+  onFileClick: () => void;
+  frontPageThumbnail: string | null;
+  watermark: WatermarkSettings;
+  onWatermarkChange: (watermark: WatermarkSettings) => void;
 }) {
-  const { tab, onChangeTab, onUploadPdf, onAddImage, onAddEmoji, fileUrl } = props;
+  const { tab, onChangeTab, onUploadPdf, onAddImage, onAddEmoji, fileUrl, pdfFileName, totalPages, currentPage, onFileClick, frontPageThumbnail, watermark, onWatermarkChange } = props;
 
   return (
     <div className="flex border-r border-gray-200 bg-white">
@@ -84,10 +101,28 @@ export function PdfLeftPanel(props: {
                 </div>
                 <input type="file" accept=".pdf" className="hidden" onChange={onUploadPdf} />
               </label>
-              {fileUrl && (
-                <div className="px-3 py-2 rounded-lg bg-green-50 border border-green-200">
-                  <div className="text-xs font-semibold text-green-800">PDF Loaded</div>
-                  <div className="text-xs text-green-600">Ready to edit</div>
+              {fileUrl && pdfFileName && (
+                <div 
+                  onClick={onFileClick}
+                  className="rounded-lg bg-green-50 border border-green-200 cursor-pointer hover:bg-green-100 transition-colors overflow-hidden"
+                >
+                  {frontPageThumbnail && (
+                    <div className="w-full h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={frontPageThumbnail}
+                        alt="PDF Preview"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  )}
+                  <div className="px-3 py-2">
+                    <div className="text-xs font-semibold text-green-800 truncate" title={pdfFileName}>
+                      {pdfFileName}
+                    </div>
+                    <div className="text-xs text-green-600 mt-1">
+                      {totalPages > 1 ? `Page ${currentPage} of ${totalPages}` : "Ready to edit"}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -180,6 +215,110 @@ export function PdfLeftPanel(props: {
               <div className="text-sm font-semibold text-gray-900">Tools & Settings</div>
               <div className="text-xs text-gray-500">PDF editor options</div>
             </div>
+            
+            {/* Watermark Settings */}
+            <div className="px-3 py-3 rounded-lg border border-gray-200 bg-white">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-xs font-semibold text-gray-900">Watermark</div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={watermark.enabled}
+                    onChange={(e) => onWatermarkChange({ ...watermark, enabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              
+              {watermark.enabled && (
+                <div className="space-y-3 mt-3">
+                  <label className="text-xs text-gray-600 block">
+                    Watermark Text
+                    <input
+                      type="text"
+                      value={watermark.text}
+                      onChange={(e) => onWatermarkChange({ ...watermark, text: e.target.value })}
+                      placeholder="e.g., CONFIDENTIAL, DRAFT"
+                      className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1.5 bg-white"
+                    />
+                  </label>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs text-gray-600">
+                      Font Size
+                      <input
+                        type="number"
+                        min={12}
+                        max={120}
+                        value={watermark.fontSize}
+                        onChange={(e) => onWatermarkChange({ ...watermark, fontSize: parseInt(e.target.value || "48", 10) })}
+                        className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                      />
+                    </label>
+                    <label className="text-xs text-gray-600">
+                      Opacity (%)
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={Math.round(watermark.opacity * 100)}
+                        onChange={(e) => onWatermarkChange({ ...watermark, opacity: parseFloat(e.target.value || "30") / 100 })}
+                        className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                      />
+                    </label>
+                  </div>
+                  
+                  <label className="text-xs text-gray-600 block">
+                    Rotation (degrees)
+                    <input
+                      type="number"
+                      min={-180}
+                      max={180}
+                      value={watermark.rotation}
+                      onChange={(e) => onWatermarkChange({ ...watermark, rotation: parseFloat(e.target.value || "0") })}
+                      className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                    />
+                  </label>
+                  
+                  <label className="text-xs text-gray-600 block">
+                    Position
+                    <select
+                      value={watermark.position}
+                      onChange={(e) => onWatermarkChange({ ...watermark, position: e.target.value as WatermarkSettings["position"] })}
+                      className="mt-1 w-full text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                    >
+                      <option value="center">Center</option>
+                      <option value="diagonal">Diagonal</option>
+                      <option value="top-left">Top Left</option>
+                      <option value="top-right">Top Right</option>
+                      <option value="bottom-left">Bottom Left</option>
+                      <option value="bottom-right">Bottom Right</option>
+                    </select>
+                  </label>
+                  
+                  <label className="text-xs text-gray-600 block">
+                    Color
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={watermark.color}
+                        onChange={(e) => onWatermarkChange({ ...watermark, color: e.target.value })}
+                        className="w-10 h-9 border border-gray-200 rounded"
+                      />
+                      <input
+                        type="text"
+                        value={watermark.color}
+                        onChange={(e) => onWatermarkChange({ ...watermark, color: e.target.value })}
+                        className="flex-1 text-xs text-gray-900 border border-gray-200 rounded-md px-2 py-1 bg-white"
+                        placeholder="#000000"
+                      />
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
+            
             <div className="space-y-2">
               <div className="px-3 py-2 rounded-lg border border-gray-200">
                 <div className="text-xs font-semibold text-gray-900 mb-1">Keyboard Shortcuts</div>

@@ -1,6 +1,6 @@
 export type CvPageSize = "A4" | "LETTER";
 
-export type CvElementType = "text" | "shape";
+export type CvElementType = "text" | "shape" | "image";
 
 export type CvFontWeight = "normal" | "bold";
 
@@ -44,7 +44,15 @@ export interface CvShapeElement extends CvBaseElement {
   borderRadius?: number; // px (UI only; export currently ignores)
 }
 
-export type CvElement = CvTextElement | CvShapeElement;
+export interface CvImageElement extends CvBaseElement {
+  type: "image";
+  imageData: string; // Base64 or blob URL
+  imageBytes?: Uint8Array; // For saving to PDF
+  rotation?: number; // Rotation in degrees (0-360)
+  opacity?: number; // Opacity 0-1 (default 1)
+}
+
+export type CvElement = CvTextElement | CvShapeElement | CvImageElement;
 
 export interface CvPage {
   id: string;
@@ -124,6 +132,25 @@ export function addShapeElement(
     zIndex: 0,
     fill: "#0B1220",
     borderRadius: 16,
+    ...partial,
+  };
+  return { ...page, elements: [...page.elements, el] };
+}
+
+export function addImageElement(
+  page: CvPage,
+  partial: Partial<Omit<CvImageElement, "id" | "type">> = {}
+): CvPage {
+  const el: CvImageElement = {
+    id: crypto.randomUUID(),
+    type: "image",
+    x: 60,
+    y: 60,
+    width: 200,
+    height: 200,
+    zIndex: 10,
+    imageData: "",
+    opacity: 1,
     ...partial,
   };
   return { ...page, elements: [...page.elements, el] };
