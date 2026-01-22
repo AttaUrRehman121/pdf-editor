@@ -16,18 +16,14 @@ import {
   User, UserCheck, UserPlus, UserMinus, UserX, UserCircle, MessageCircle, MessageSquare,
   Send, Inbox, Trash2, Save, RefreshCw, RotateCw, RotateCcw, Repeat, Shuffle,
   ChevronRight, ChevronLeft, ChevronUp, ChevronDown, MoreHorizontal, MoreVertical,
-  Menu, Grid3x3, LayoutGrid, Sidebar, PanelLeft, PanelRight, Layers, Grid, Layout,
-  Columns, Rows, Maximize, Minimize, Battery, BatteryCharging, Power, Plug, PlugZap,
-  WifiOff, Signal, SignalHigh, SignalLow, SignalZero, RadioReceiver, Broadcast,
-  Satellite, SatelliteDish, Earth, MapPinned, Navigation2, PlaneTakeoff, PlaneLanding,
-  CarFront, Anchor, RocketLaunch, Space, Telescope, Lightbulb, LightbulbOff, Flame,
-  Droplet, Leaf, Flower, Flower2, Tree, TreePine, Sun, Moon, CloudRain, CloudSnow,
-  CloudLightning, CloudDrizzle, Snowflake, Wind, Umbrella, UmbrellaOff, Rainbow,
-  Gift, Trophy, Medal, Crown, Gem, Diamond, Coins, Wallet, CreditCard, Receipt,
-  ShoppingCart, Package, Box, Archive, Folder, FolderOpen, File, Palette, Paintbrush,
-  Brush, Eraser, Unlock, Building2, Factory, Hotel,
-  Hospital, University, Library, Bookmark, Notebook, StickyNote, Files,
-  Boxes, Warehouse, Store, ShoppingBag, ShoppingBasket
+  Menu, Maximize, Minimize, Power, Plug,
+  Earth, Lightbulb, Flame,
+  Droplet, Leaf, Sun, Moon,
+  Gift, Trophy, Medal, Wallet, CreditCard, Receipt,
+  ShoppingCart, Package, Box, Archive, Folder, FolderOpen, File,
+  Building2, Factory,
+  Hospital, University, Library, Bookmark, Notebook, Files,
+  Store, ShoppingBag, Warehouse
 } from "lucide-react";
 
 type EmojiIconPickerProps = {
@@ -115,7 +111,6 @@ const ICON_CATEGORIES = {
     { name: "Building 2", icon: Building2, emoji: "🏢" },
     { name: "Factory", icon: Factory, emoji: "🏭" },
     { name: "Store", icon: Store, emoji: "🏪" },
-    { name: "Warehouse", icon: Warehouse, emoji: "🏭" },
     { name: "Dollar", icon: DollarSign, emoji: "💵" },
     { name: "Percent", icon: Percent, emoji: "%" },
     { name: "Credit Card", icon: CreditCard, emoji: "💳" },
