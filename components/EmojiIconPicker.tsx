@@ -13,7 +13,7 @@ import {
   FileCheck, FileX, FileEdit, FileSearch, Download, Upload, Share2, Link, ExternalLink,
   Copy, Clipboard, ClipboardCheck, Scissors, Edit, PenTool, Type, AlignLeft, AlignCenter,
   AlignRight, Bold, Italic, Underline, Strikethrough, List, ListOrdered, Image, Film,
-  Play, Pause, Settings, Cog, Wrench, Tool, Hammer, Search, Filter, Bell, Eye, EyeOff,
+  Play, Pause, Settings, Cog, Wrench, Hammer, Search, Filter, Bell, Eye, EyeOff,
   User, UserCheck, UserPlus, UserMinus, UserX, UserCircle, MessageCircle, MessageSquare,
   Send, Inbox, Trash2, Save, RefreshCw, RotateCw, RotateCcw, Repeat, Shuffle,
   ChevronRight, ChevronLeft, ChevronUp, ChevronDown, MoreHorizontal, MoreVertical,
