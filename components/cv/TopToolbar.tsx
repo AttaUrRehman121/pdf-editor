@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Download, Minus, Plus } from "lucide-react";
+import { Download, Minus, Plus, ChevronLeft, ChevronRight, X, FilePlus } from "lucide-react";
 import type { CvElement, CvPageSize } from "@/lib/cv-model";
 
 const zoomOptions = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -19,8 +19,13 @@ export function TopToolbar(props: {
   selected: CvElement | null;
   onChangeSelected: (updates: Partial<CvElement>) => void;
   onExportPdf: () => void;
+  currentPageIndex: number;
+  totalPages: number;
+  onPageChange: (index: number) => void;
+  onAddPage: () => void;
+  onRemovePage: () => void;
 }) {
-  const { pageSize, onChangePageSize, zoom, onChangeZoom, selected, onChangeSelected, onExportPdf } = props;
+  const { pageSize, onChangePageSize, zoom, onChangeZoom, selected, onChangeSelected, onExportPdf, currentPageIndex, totalPages, onPageChange, onAddPage, onRemovePage } = props;
 
   const isText = selected?.type === "text";
   const isShape = selected?.type === "shape";
@@ -63,6 +68,50 @@ export function TopToolbar(props: {
           <option value="A4">A4</option>
           <option value="LETTER">Letter</option>
         </select>
+      </div>
+
+      <div className="h-6 w-px bg-gray-200 mx-1" />
+
+      {/* Page Navigation */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(Math.max(0, currentPageIndex - 1))}
+          disabled={currentPageIndex === 0}
+          className={`${iconButtonBase} ${currentPageIndex === 0 ? "opacity-50 cursor-not-allowed" : ""}`}
+          title="Previous page"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <div className="flex items-center gap-1 px-2 py-1 text-xs text-gray-700 bg-gray-50 rounded border border-gray-200">
+          <span>Page</span>
+          <span className="font-semibold">{currentPageIndex + 1}</span>
+          <span>of</span>
+          <span className="font-semibold">{totalPages}</span>
+        </div>
+        <button
+          onClick={() => onPageChange(Math.min(totalPages - 1, currentPageIndex + 1))}
+          disabled={currentPageIndex >= totalPages - 1}
+          className={`${iconButtonBase} ${currentPageIndex >= totalPages - 1 ? "opacity-50 cursor-not-allowed" : ""}`}
+          title="Next page"
+        >
+          <ChevronRight size={16} />
+        </button>
+        <button
+          onClick={onAddPage}
+          className={`${iconButtonBase} text-blue-600 hover:bg-blue-50`}
+          title="Add new page"
+        >
+          <FilePlus size={16} />
+        </button>
+        {totalPages > 1 && (
+          <button
+            onClick={onRemovePage}
+            className={`${iconButtonBase} text-red-600 hover:bg-red-50`}
+            title="Remove current page"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       <div className="h-6 w-px bg-gray-200 mx-1" />

@@ -21,8 +21,9 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [leftTab, setLeftTab] = useState<LeftTab>("text");
   const [zoom, setZoom] = useState(1);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
-  const page = doc.pages[0];
+  const page = doc.pages[currentPageIndex] || doc.pages[0];
   const pageDims = PAGE_DIMENSIONS[doc.pageSize];
 
   const selectedElement: CvElement | null = useMemo(() => {
@@ -36,10 +37,35 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
   };
 
   const clearCanvas = () => {
+    setDoc((prev) => {
+      const newPages = [...prev.pages];
+      newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements: [] };
+      return { ...prev, pages: newPages };
+    });
+    setSelectedId(null);
+  };
+
+  const addPage = () => {
     setDoc((prev) => ({
       ...prev,
-      pages: [{ ...prev.pages[0], elements: [] }],
+      pages: [...prev.pages, { id: crypto.randomUUID(), elements: [] }],
     }));
+    setCurrentPageIndex(doc.pages.length);
+    setSelectedId(null);
+  };
+
+  const removePage = (index: number) => {
+    if (doc.pages.length <= 1) return; // Don't allow removing the last page
+    setDoc((prev) => ({
+      ...prev,
+      pages: prev.pages.filter((_, i) => i !== index),
+    }));
+    // Adjust current page index if needed
+    if (currentPageIndex >= doc.pages.length - 1) {
+      setCurrentPageIndex(Math.max(0, doc.pages.length - 2));
+    } else if (currentPageIndex > index) {
+      setCurrentPageIndex(currentPageIndex - 1);
+    }
     setSelectedId(null);
   };
 
@@ -55,7 +81,9 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
       const current = prev.pages[0];
       if (current.elements.length > 0) return prev;
       const elements = makeModernTemplate(prev.pageSize);
-      return { ...prev, pages: [{ ...current, elements }] };
+      const newPages = [...prev.pages];
+      newPages[0] = { ...current, elements };
+      return { ...prev, pages: newPages };
     });
   }, [initialTemplate]);
 
@@ -151,27 +179,31 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
         selected={selectedElement}
         onChangeSelected={(updates) => {
           if (!selectedId) return;
-          setDoc((prev) => ({
-            ...prev,
-            pages: [
-              {
-                ...prev.pages[0],
-                elements: prev.pages[0].elements.map((el) => {
-                  if (el.id !== selectedId) return el;
-                  if (el.type !== "text") return ({ ...el, ...updates } as CvElement);
+          setDoc((prev) => {
+            const newPages = [...prev.pages];
+            newPages[currentPageIndex] = {
+              ...newPages[currentPageIndex],
+              elements: newPages[currentPageIndex].elements.map((el) => {
+                if (el.id !== selectedId) return el;
+                if (el.type !== "text") return ({ ...el, ...updates } as CvElement);
 
-                  // If list style changes, rewrite the text prefixes so Enter auto-continues nicely.
-                  const nextEl = { ...el, ...updates } as any;
-                  if (Object.prototype.hasOwnProperty.call(updates, "listStyle")) {
-                    nextEl.text = applyListStyleToText(el.text, (updates as any).listStyle);
-                  }
-                  return nextEl as CvElement;
-                }),
-              },
-            ],
-          }));
+                // If list style changes, rewrite the text prefixes so Enter auto-continues nicely.
+                const nextEl = { ...el, ...updates } as any;
+                if (Object.prototype.hasOwnProperty.call(updates, "listStyle")) {
+                  nextEl.text = applyListStyleToText(el.text, (updates as any).listStyle);
+                }
+                return nextEl as CvElement;
+              }),
+            };
+            return { ...prev, pages: newPages };
+          });
         }}
         onExportPdf={handleExportPdf}
+        currentPageIndex={currentPageIndex}
+        totalPages={doc.pages.length}
+        onPageChange={setCurrentPageIndex}
+        onAddPage={addPage}
+        onRemovePage={() => removePage(currentPageIndex)}
       />
 
       <div className="flex h-[calc(100vh-6rem)]">
@@ -180,17 +212,22 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
           onChangeTab={setLeftTab}
           onClearCanvas={clearCanvas}
           onApplyTemplate={(elements) => {
-            setDoc((prev) => ({
-              ...prev,
-              pages: [{ ...prev.pages[0], elements }],
-            }));
+            setDoc((prev) => {
+              const newPages = [...prev.pages];
+              newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements };
+              return { ...prev, pages: newPages };
+            });
             setSelectedId(null);
           }}
           onAddElements={(elements) => {
-            setDoc((prev) => ({
-              ...prev,
-              pages: [{ ...prev.pages[0], elements: [...prev.pages[0].elements, ...elements] }],
-            }));
+            setDoc((prev) => {
+              const newPages = [...prev.pages];
+              newPages[currentPageIndex] = {
+                ...newPages[currentPageIndex],
+                elements: [...newPages[currentPageIndex].elements, ...elements],
+              };
+              return { ...prev, pages: newPages };
+            });
             // select last added (topmost)
             const last = elements[elements.length - 1];
             if (last) setSelectedId(last.id);
@@ -203,32 +240,41 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
           selectedId={selectedId}
           zoom={zoom}
           onSelect={setSelectedId}
-          onChangeElements={(next) => setDoc((prev) => ({ ...prev, pages: [{ ...prev.pages[0], elements: next }] }))}
+          onChangeElements={(next) => {
+            setDoc((prev) => {
+              const newPages = [...prev.pages];
+              newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements: next };
+              return { ...prev, pages: newPages };
+            });
+          }}
         />
 
         <RightInspector
           selected={selectedElement}
           onDelete={() => {
             if (!selectedId) return;
-            setDoc((prev) => ({
-              ...prev,
-              pages: [{ ...prev.pages[0], elements: prev.pages[0].elements.filter((e) => e.id !== selectedId) }],
-            }));
+            setDoc((prev) => {
+              const newPages = [...prev.pages];
+              newPages[currentPageIndex] = {
+                ...newPages[currentPageIndex],
+                elements: newPages[currentPageIndex].elements.filter((e) => e.id !== selectedId),
+              };
+              return { ...prev, pages: newPages };
+            });
             setSelectedId(null);
           }}
           onChange={(updates) => {
             if (!selectedId) return;
-            setDoc((prev) => ({
-              ...prev,
-              pages: [
-                {
-                  ...prev.pages[0],
-                  elements: prev.pages[0].elements.map((el) =>
-                    el.id === selectedId ? ({ ...el, ...updates } as CvElement) : el
-                  ),
-                },
-              ],
-            }));
+            setDoc((prev) => {
+              const newPages = [...prev.pages];
+              newPages[currentPageIndex] = {
+                ...newPages[currentPageIndex],
+                elements: newPages[currentPageIndex].elements.map((el) =>
+                  el.id === selectedId ? ({ ...el, ...updates } as CvElement) : el
+                ),
+              };
+              return { ...prev, pages: newPages };
+            });
           }}
         />
       </div>

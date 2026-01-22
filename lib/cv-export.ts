@@ -115,41 +115,44 @@ export async function exportCvToPdf(doc: CvDocument, canvasWidth: number, canvas
   const pdfDoc = await PDFDocument.create();
   const { width: pdfWidth, height: pdfHeight } = PDF_PAGE_POINTS[doc.pageSize];
 
-  const page = pdfDoc.addPage([pdfWidth, pdfHeight]);
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   const scaleX = pdfWidth / canvasWidth;
   const scaleY = pdfHeight / canvasHeight;
 
-  const elements = doc.pages[0]?.elements ?? [];
-  const sorted = elements.slice().sort((a, b) => a.zIndex - b.zIndex);
+  // Process all pages
+  for (const cvPage of doc.pages) {
+    const page = pdfDoc.addPage([pdfWidth, pdfHeight]);
+    const elements = cvPage?.elements ?? [];
+    const sorted = elements.slice().sort((a, b) => a.zIndex - b.zIndex);
 
-  for (const el of sorted) {
-    if (el.type === "shape") {
-      const fill01 = parseColorToRgb01(el.fill, { r: 1, g: 1, b: 1 });
-      const x = el.x * scaleX;
-      const y = pdfHeight - (el.y + el.height) * scaleY;
-      const w = el.width * scaleX;
-      const h = el.height * scaleY;
+    for (const el of sorted) {
+      if (el.type === "shape") {
+        const fill01 = parseColorToRgb01(el.fill, { r: 1, g: 1, b: 1 });
+        const x = el.x * scaleX;
+        const y = pdfHeight - (el.y + el.height) * scaleY;
+        const w = el.width * scaleX;
+        const h = el.height * scaleY;
 
-      page.drawRectangle({
-        x,
-        y,
-        width: w,
-        height: h,
-        color: rgb(fill01.r, fill01.g, fill01.b),
-      });
-    } else {
-      drawTextElement({
-        page,
-        el,
-        scaleX,
-        scaleY,
-        pdfHeight,
-        fontRegular,
-        fontBold,
-      });
+        page.drawRectangle({
+          x,
+          y,
+          width: w,
+          height: h,
+          color: rgb(fill01.r, fill01.g, fill01.b),
+        });
+      } else {
+        drawTextElement({
+          page,
+          el,
+          scaleX,
+          scaleY,
+          pdfHeight,
+          fontRegular,
+          fontBold,
+        });
+      }
     }
   }
 
