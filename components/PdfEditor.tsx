@@ -262,6 +262,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       x: Math.max(0, Math.min(pdfX, pdfDimensions.width - 50)), // Ensure within bounds
       y: Math.max(0, Math.min(pdfY, pdfDimensions.height - 50)), // Ensure within bounds
       width: 50, // Wider for better visibility
+      height: fontSize * 1.2, // Height based on font size
       fontSize: fontSize,
       fontName: "Arial",
       fontFamily: "Arial, Helvetica, sans-serif",
