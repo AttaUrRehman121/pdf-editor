@@ -371,6 +371,23 @@ export function CanvasStage(props: {
               listStyle: "none",
               color: "#334155",
             };
+          } else if (parsed.type === "emoji") {
+            next = {
+              id: crypto.randomUUID(),
+              type: "text",
+              x: p.x - 20,
+              y: p.y - 16,
+              width: 40,
+              height: 32,
+              zIndex: 20,
+              text: parsed.value || "😀",
+              fontSize: 24,
+              fontWeight: "normal",
+              align: "left",
+              fontFamily: "Arial, sans-serif",
+              listStyle: "none",
+              color: "#000000",
+            };
           }
           if (next) {
             onChangeElements([...elements, next]);

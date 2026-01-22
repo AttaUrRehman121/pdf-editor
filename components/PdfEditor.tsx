@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { Download, Upload, Image as ImageIcon, X, Maximize2 } from "lucide-react";
 import { CvDesigner } from "@/components/cv/CvDesigner";
+import { PdfLeftPanel } from "@/components/PdfLeftPanel";
+import { PdfRightInspector } from "@/components/PdfRightInspector";
 import {
   extractTextFromPDF,
   pdfPointToHtmlPoint,
@@ -47,6 +49,7 @@ const colorToHexForInput = (color: string | undefined | null): string => {
 
 export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorProps) {
   const [mode, setMode] = useState<EditorMode>(initialMode === "cv" ? "cv" : "pdf");
+  const [leftTab, setLeftTab] = useState<"upload" | "text" | "images" | "emojis" | "tools">("upload");
 
   const [items, setItems] = useState<TextItem[]>([]);
   const [images, setImages] = useState<ImageItem[]>([]);
@@ -57,6 +60,9 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef({ x: 0, y: 0, width: 0, height: 0, imageX: 0, imageY: 0 });
+  const [resizeDirection, setResizeDirection] = useState<string>("");
 
   // Simple formatting toolbar state
   const [toolbarFontFamily, setToolbarFontFamily] = useState("Helvetica");
@@ -64,28 +70,14 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const [toolbarTextColor, setToolbarTextColor] = useState("#000000");
   const [toolbarBold, setToolbarBold] = useState(false);
 
+  // File input refs
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const isPdfMode = mode === "pdf";
-
-  // 1. Handle File Upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const url = URL.createObjectURL(file);
-    setFileUrl(url);
-
-    // Extract Data
-    const { items: extractedItems, width, height, originalPdfBytes } = await extractTextFromPDF(url);
-    setItems(extractedItems);
-    setPdfDimensions({ width, height });
-    setOriginalPdfBytes(originalPdfBytes);
-
-    // Render Background Canvas and detect actual background colors
-    renderPdfBackground(url, extractedItems);
-  };
 
   // 2. Render PDF to Canvas (Visual Background Only)
   const renderPdfBackground = async (url: string, currentItems?: TextItem[]) => {
@@ -110,6 +102,43 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     if (context && currentItems) {
       detectBackgroundColors(context, currentItems, viewport.height);
     }
+  };
+
+  // Re-render PDF when switching back to PDF mode
+  useEffect(() => {
+    if (isPdfMode && fileUrl && items.length > 0) {
+      // Wait for canvas to be available in DOM, then re-render
+      let attempts = 0;
+      const maxAttempts = 20; // Max 1 second wait
+      const checkAndRender = () => {
+        if (canvasRef.current) {
+          renderPdfBackground(fileUrl, items);
+        } else if (attempts < maxAttempts) {
+          attempts++;
+          setTimeout(checkAndRender, 50);
+        }
+      };
+      const timer = setTimeout(checkAndRender, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isPdfMode, fileUrl]); // Re-run when mode or fileUrl changes
+
+  // 1. Handle File Upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const url = URL.createObjectURL(file);
+    setFileUrl(url);
+
+    // Extract Data
+    const { items: extractedItems, width, height, originalPdfBytes } = await extractTextFromPDF(url);
+    setItems(extractedItems);
+    setPdfDimensions({ width, height });
+    setOriginalPdfBytes(originalPdfBytes);
+
+    // Render Background Canvas and detect actual background colors
+    renderPdfBackground(url, extractedItems);
   };
 
   const detectBackgroundColors = (
@@ -201,6 +230,52 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     );
   };
 
+  // 9. Handle Emoji Addition
+  const handleAddEmoji = (emoji: string, screenX: number, screenY: number) => {
+    if (!fileUrl || !pdfDimensions.width || !canvasRef.current) return;
+    
+    const scale = 1.5;
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    
+    // Get relative position within canvas
+    const relativeX = screenX - canvasRect.left;
+    const relativeY = screenY - canvasRect.top;
+    
+    // Ensure we're within canvas bounds
+    if (relativeX < 0 || relativeY < 0 || relativeX > canvasRect.width || relativeY > canvasRect.height) {
+      return;
+    }
+    
+    // Convert HTML coordinates (top-left origin) to PDF coordinates (bottom-left origin)
+    // PDF uses bottom-left, so we need to invert Y
+    const fontSize = 36; // Larger size for better visibility
+    const pdfX = relativeX / scale;
+    const htmlY = relativeY;
+    const viewportHeight = pdfDimensions.height * scale;
+    // Reverse the pdfPointToHtmlPoint formula: htmlY = viewportHeight - pdfY * scale - fontSize * scale
+    // So: pdfY = (viewportHeight - htmlY - fontSize * scale) / scale
+    const pdfY = (viewportHeight - htmlY - fontSize * scale) / scale;
+    
+    const newTextItem: TextItem = {
+      id: crypto.randomUUID(),
+      text: emoji,
+      x: Math.max(0, Math.min(pdfX, pdfDimensions.width - 50)), // Ensure within bounds
+      y: Math.max(0, Math.min(pdfY, pdfDimensions.height - 50)), // Ensure within bounds
+      width: 50, // Wider for better visibility
+      fontSize: fontSize,
+      fontName: "Arial",
+      fontFamily: "Arial, Helvetica, sans-serif",
+      isBold: false,
+      isItalic: false,
+      textColor: "rgb(0, 0, 0)",
+      backgroundColor: "transparent",
+      hasChanged: true,
+    };
+    
+    setItems((prev) => [...prev, newTextItem]);
+    setSelectedTextId(newTextItem.id);
+  };
+
   // 4. Handle Image Upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -236,6 +311,165 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     );
   };
 
+  // Handle corner resize
+  const handleCornerResize = (e: React.MouseEvent, id: string, direction: "nw" | "ne" | "sw" | "se") => {
+    e.preventDefault();
+    e.stopPropagation();
+    const image = images.find((img) => img.id === id);
+    if (!image || !canvasRef.current) return;
+
+    setSelectedImageId(id);
+    setIsResizing(true);
+    setResizeDirection(direction);
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: image.width,
+      height: image.height,
+      imageX: image.x,
+      imageY: image.y,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!canvasRef.current) return;
+      const start = resizeStartRef.current;
+      const deltaX = (moveEvent.clientX - start.x) / 1.5; // Account for scale
+      const deltaY = (moveEvent.clientY - start.y) / 1.5;
+
+      let newWidth = start.width;
+      let newHeight = start.height;
+      let newX = start.imageX;
+      let newY = start.imageY;
+
+      const minSize = 20;
+      const maxWidth = pdfDimensions.width - start.imageX;
+      const maxHeight = pdfDimensions.height - start.imageY;
+
+      switch (direction) {
+        case "nw":
+          newWidth = Math.max(minSize, Math.min(maxWidth, start.width - deltaX));
+          newHeight = Math.max(minSize, Math.min(maxHeight, start.height - deltaY));
+          newX = start.imageX + (start.width - newWidth);
+          newY = start.imageY + (start.height - newHeight);
+          break;
+        case "ne":
+          newWidth = Math.max(minSize, Math.min(maxWidth, start.width + deltaX));
+          newHeight = Math.max(minSize, Math.min(maxHeight, start.height - deltaY));
+          newY = start.imageY + (start.height - newHeight);
+          break;
+        case "sw":
+          newWidth = Math.max(minSize, Math.min(maxWidth, start.width - deltaX));
+          newHeight = Math.max(minSize, Math.min(maxHeight, start.height + deltaY));
+          newX = start.imageX + (start.width - newWidth);
+          break;
+        case "se":
+          newWidth = Math.max(minSize, Math.min(maxWidth, start.width + deltaX));
+          newHeight = Math.max(minSize, Math.min(maxHeight, start.height + deltaY));
+          break;
+      }
+
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === id
+            ? {
+                ...img,
+                width: Math.max(minSize, newWidth),
+                height: Math.max(minSize, newHeight),
+                x: Math.max(0, newX),
+                y: Math.max(0, newY),
+              }
+            : img
+        )
+      );
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      setResizeDirection("");
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
+  const handleSideResize = (e: React.MouseEvent, id: string, direction: "n" | "s" | "e" | "w") => {
+    e.preventDefault();
+    e.stopPropagation();
+    const image = images.find((img) => img.id === id);
+    if (!image || !canvasRef.current) return;
+
+    setSelectedImageId(id);
+    setIsResizing(true);
+    setResizeDirection(direction);
+    const canvasRect = canvasRef.current.getBoundingClientRect();
+    resizeStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      width: image.width,
+      height: image.height,
+      imageX: image.x,
+      imageY: image.y,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!canvasRef.current) return;
+      const start = resizeStartRef.current;
+      const deltaX = (moveEvent.clientX - start.x) / 1.5;
+      const deltaY = (moveEvent.clientY - start.y) / 1.5;
+
+      let newWidth = start.width;
+      let newHeight = start.height;
+      let newX = start.imageX;
+      let newY = start.imageY;
+
+      const minSize = 20;
+
+      switch (direction) {
+        case "n":
+          newHeight = Math.max(minSize, start.height - deltaY);
+          newY = start.imageY + (start.height - newHeight);
+          break;
+        case "s":
+          newHeight = Math.max(minSize, start.height + deltaY);
+          break;
+        case "w":
+          newWidth = Math.max(minSize, start.width - deltaX);
+          newX = start.imageX + (start.width - newWidth);
+          break;
+        case "e":
+          newWidth = Math.max(minSize, start.width + deltaX);
+          break;
+      }
+
+      setImages((prev) =>
+        prev.map((img) =>
+          img.id === id
+            ? {
+                ...img,
+                width: Math.max(minSize, newWidth),
+                height: Math.max(minSize, newHeight),
+                x: Math.max(0, newX),
+                y: Math.max(0, newY),
+              }
+            : img
+        )
+      );
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      setResizeDirection("");
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
   // 6. Handle Image Delete
   const handleImageDelete = (id: string) => {
     setImages((prev) => {
@@ -262,7 +496,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   };
 
   const handleImageMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !selectedImageId || !canvasRef.current) return;
+    if ((!isDragging || isResizing) || !selectedImageId || !canvasRef.current) return;
 
     const canvasRect = canvasRef.current.getBoundingClientRect();
     const newX = e.clientX - canvasRect.left - dragStart.x;
@@ -342,125 +576,77 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       {/* PDF EDITOR MODE */}
       {isPdfMode && (
         <>
-          {/* File Toolbar */}
-          <div className="bg-white/90 border border-slate-800/60 rounded-xl shadow-sm mb-6 flex flex-wrap gap-3 w-full max-w-5xl items-center px-4 py-3 mx-auto">
-            <div className="flex items-center gap-2">
-              <label className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-slate-950 rounded-lg cursor-pointer hover:bg-teal-400 shadow-sm text-sm font-semibold">
-                <Upload size={16} />
-                Upload PDF
-                <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} />
-              </label>
-              {fileUrl && (
-                <label className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-teal-100 rounded-lg cursor-pointer hover:bg-slate-800 shadow-sm text-sm font-semibold">
-                  <ImageIcon size={16} />
-                  Add Image
-                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-                </label>
-              )}
-            </div>
-            <div className="flex-1" />
+          {/* Hidden file inputs */}
+          <input
+            ref={pdfInputRef}
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={handleFileUpload}
+          />
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageUpload}
+          />
+
+          {/* Top Toolbar */}
+          <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3">
+            <div className="text-sm font-semibold text-gray-900">PDF Editor</div>
+            <div className="h-6 w-px bg-gray-200" />
             <button
               onClick={handleDownload}
               disabled={!fileUrl}
-              className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-slate-950 rounded-lg hover:bg-teal-400 disabled:opacity-50 shadow-sm text-sm font-semibold"
+              className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
             >
               <Download size={16} />
               Download PDF
             </button>
           </div>
 
-          {/* Formatting Toolbar (shown when some text is focused) */}
-          {fileUrl && selectedTextId && (
-            <div className="bg-white/95 border border-slate-800/60 rounded-xl shadow-sm mb-4 flex items-center gap-3 w-full max-w-5xl px-3 py-2 mx-auto">
-              {/* Font family */}
-              <select
-                value={toolbarFontFamily}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setToolbarFontFamily(value);
-                  // Map to a reasonable CSS stack
-                  let family = "";
-                  if (value === "Times New Roman") {
-                    family = '"Times New Roman", Times, serif';
-                  } else if (value === "Courier New") {
-                    family = '"Courier New", Courier, monospace';
-                  } else {
-                    family = `${value}, Arial, Helvetica, sans-serif`;
+          {/* Main Editor Layout */}
+          <div className="flex h-[calc(100vh-6rem)]">
+            {/* Left Panel */}
+            <PdfLeftPanel
+              tab={leftTab}
+              onChangeTab={setLeftTab}
+              onUploadPdf={handleFileUpload}
+              onAddImage={handleImageUpload}
+              onAddEmoji={handleAddEmoji}
+              fileUrl={fileUrl}
+            />
+
+            {/* Canvas Area */}
+            {fileUrl && (
+              <div 
+                className="flex-1 overflow-auto flex justify-center px-2 bg-gray-50"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const canvasRect = canvasRef.current?.getBoundingClientRect();
+                  if (!canvasRect) return;
+                  
+                  const data = e.dataTransfer.getData("application/json");
+                  if (!data) return;
+                  
+                  try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.type === "emoji") {
+                      handleAddEmoji(parsed.value || "😀", e.clientX, e.clientY);
+                    }
+                  } catch (err) {
+                    console.error("Failed to parse drop data", err);
                   }
-                  updateSelectedTextFormat({
-                    fontName: value,
-                    fontFamily: family,
-                  });
                 }}
-                className="px-2 py-1 border border-slate-300 rounded text-sm bg-white text-slate-900"
               >
-                <option value="Helvetica">Helvetica</option>
-                <option value="Arial">Arial</option>
-                <option value="Times New Roman">Times New Roman</option>
-                <option value="Courier New">Courier New</option>
-              </select>
+                <div className="relative inline-block shadow-xl border border-gray-300 bg-white">
+                  {/* Layer A: Canvas (Visuals) */}
+                  <canvas ref={canvasRef} className="block" />
 
-              {/* Font size */}
-              <input
-                type="number"
-                min={6}
-                max={72}
-                value={toolbarFontSize}
-                onChange={(e) => {
-                  const size = parseInt(e.target.value || "0", 10) || 11;
-                  setToolbarFontSize(size);
-                  updateSelectedTextFormat({ fontSize: size });
-                }}
-                className="w-16 px-2 py-1 border border-slate-300 rounded text-sm bg-white text-slate-900"
-              />
-
-              {/* Bold toggle */}
-              <button
-                onClick={() => {
-                  const nextBold = !toolbarBold;
-                  setToolbarBold(nextBold);
-                  updateSelectedTextFormat({ isBold: nextBold });
-                }}
-                className={`px-2 py-1 rounded text-sm font-bold border ${
-                  toolbarBold
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-900 border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                B
-              </button>
-
-              {/* Text color */}
-              <div className="flex items-center gap-1">
-                <span className="text-xs text-slate-700">Text color</span>
-                <input
-                  type="color"
-                  value={toolbarTextColor}
-                  onChange={(e) => {
-                    const hex = e.target.value;
-                    setToolbarTextColor(hex);
-                    // Convert hex to rgb() string to stay compatible with saver
-                    const r = parseInt(hex.slice(1, 3), 16);
-                    const g = parseInt(hex.slice(3, 5), 16);
-                    const b = parseInt(hex.slice(5, 7), 16);
-                    const rgb = `rgb(${r}, ${g}, ${b})`;
-                    updateSelectedTextFormat({ textColor: rgb });
-                  }}
-                  className="w-8 h-8 border border-slate-300 rounded cursor-pointer bg-white"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Editor Area */}
-          {fileUrl && (
-            <div className="w-full overflow-auto flex justify-center px-2">
-              <div className="relative inline-block shadow-xl border border-gray-300 bg-white">
-                {/* Layer A: Canvas (Visuals) */}
-                <canvas ref={canvasRef} className="block" />
-
-                {/* Layer B: Inputs (Editable) with sampled background + native look */}
-                {items.map((item) => {
+                  {/* Layer B: Inputs (Editable) with sampled background + native look */}
+                  {items.map((item) => {
                   const scale = 1.5;
                   const { x: htmlX, y: htmlY } = pdfPointToHtmlPoint(item.x, item.y, {
                     scale,
@@ -561,7 +747,13 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                   return (
                     <div
                       key={image.id}
-                      onMouseDown={(e) => handleImageMouseDown(e, image.id)}
+                      onMouseDown={(e) => {
+                        // Don't start drag if clicking on resize handle
+                        if ((e.target as HTMLElement).classList.contains("resize-handle")) {
+                          return;
+                        }
+                        handleImageMouseDown(e, image.id);
+                      }}
                       onMouseMove={handleImageMouseMove}
                       onMouseUp={handleImageMouseUp}
                       onMouseLeave={handleImageMouseUp}
@@ -586,39 +778,152 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           height: "100%",
                           objectFit: "contain",
                           pointerEvents: "none",
+                          userSelect: "none",
                         }}
+                        draggable={false}
                       />
                       {isSelected && (
-                        <div className="absolute -top-8 left-0 flex gap-1 bg-white rounded shadow-lg p-1">
-                          <button
-                            onClick={() => handleImageResize(image.id, image.width * 1.1, image.height * 1.1)}
-                            className="p-1 hover:bg-gray-200 rounded"
-                            title="Resize Larger"
-                          >
-                            <Maximize2 size={14} />
-                          </button>
-                          <button
-                            onClick={() => handleImageResize(image.id, image.width * 0.9, image.height * 0.9)}
-                            className="p-1 hover:bg-gray-200 rounded"
-                            title="Resize Smaller"
-                          >
-                            <Maximize2 size={14} className="rotate-180" />
-                          </button>
-                          <button
-                            onClick={() => handleImageDelete(image.id)}
-                            className="p-1 hover:bg-red-200 rounded text-red-600"
-                            title="Delete Image"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
+                        <>
+                          {/* Corner Resize Handles */}
+                          <div
+                            className="resize-handle absolute -top-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nwse-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleCornerResize(e, image.id, "nw");
+                            }}
+                            title="Resize (top-left)"
+                          />
+                          <div
+                            className="resize-handle absolute -top-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nesw-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleCornerResize(e, image.id, "ne");
+                            }}
+                            title="Resize (top-right)"
+                          />
+                          <div
+                            className="resize-handle absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nesw-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleCornerResize(e, image.id, "sw");
+                            }}
+                            title="Resize (bottom-left)"
+                          />
+                          <div
+                            className="resize-handle absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nwse-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleCornerResize(e, image.id, "se");
+                            }}
+                            title="Resize (bottom-right)"
+                          />
+                          
+                          {/* Side Resize Handles */}
+                          <div
+                            className="resize-handle absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ns-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleSideResize(e, image.id, "n");
+                            }}
+                            title="Resize (top)"
+                          />
+                          <div
+                            className="resize-handle absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ns-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleSideResize(e, image.id, "s");
+                            }}
+                            title="Resize (bottom)"
+                          />
+                          <div
+                            className="resize-handle absolute -left-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ew-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleSideResize(e, image.id, "w");
+                            }}
+                            title="Resize (left)"
+                          />
+                          <div
+                            className="resize-handle absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ew-resize z-50"
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleSideResize(e, image.id, "e");
+                            }}
+                            title="Resize (right)"
+                          />
+                          
+                          {/* Control Toolbar - Positioned below image */}
+                          <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 flex gap-1 bg-white rounded-lg shadow-lg border border-gray-200 p-1.5 z-50">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleImageResize(image.id, image.width * 1.1, image.height * 1.1);
+                              }}
+                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              title="Enlarge (10%)"
+                            >
+                              <Maximize2 size={16} className="text-gray-700" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleImageResize(image.id, image.width * 0.9, image.height * 0.9);
+                              }}
+                              className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                              title="Shrink (10%)"
+                            >
+                              <Maximize2 size={16} className="rotate-180 text-gray-700" />
+                            </button>
+                            <div className="w-px bg-gray-300 mx-1" />
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleImageDelete(image.id);
+                              }}
+                              className="p-1.5 hover:bg-red-100 rounded transition-colors text-red-600"
+                              title="Delete Image"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   );
-                })}
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Right Panel */}
+            <PdfRightInspector
+              selectedText={selectedTextId ? items.find((i) => i.id === selectedTextId) || null : null}
+              selectedImage={selectedImageId ? images.find((i) => i.id === selectedImageId) || null : null}
+              onUpdateText={(updates) => {
+                if (selectedTextId) {
+                  updateSelectedTextFormat(updates);
+                }
+              }}
+              onUpdateImage={(updates) => {
+                if (selectedImageId) {
+                  setImages((prev) =>
+                    prev.map((img) => (img.id === selectedImageId ? { ...img, ...updates } : img))
+                  );
+                }
+              }}
+              onDeleteText={() => {
+                if (selectedTextId) {
+                  setItems((prev) => prev.filter((item) => item.id !== selectedTextId));
+                  setSelectedTextId(null);
+                }
+              }}
+              onDeleteImage={() => {
+                if (selectedImageId) {
+                  handleImageDelete(selectedImageId);
+                }
+              }}
+            />
+          </div>
         </>
       )}
 

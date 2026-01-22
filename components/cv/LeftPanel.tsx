@@ -1,261 +1,27 @@
 "use client";
 
 import React from "react";
-import { LayoutTemplate, Shapes, Type } from "lucide-react";
+import { LayoutTemplate, Shapes, Type, Smile } from "lucide-react";
 import type { CvElement } from "@/lib/cv-model";
-import { addBodyTextElement, addShapeElement, addTextElement, PAGE_DIMENSIONS } from "@/lib/cv-model";
+import { addBodyTextElement, addShapeElement, addTextElement } from "@/lib/cv-model";
+import { EmojiIconPicker } from "@/components/EmojiIconPicker";
+import {
+  makeModernTemplate,
+  makeClassicSingleColumnTemplate,
+  makeMinimalistCleanTemplate,
+  makeProfessionalTwoColumnTemplate,
+  makeExecutiveSingleColumnTemplate,
+  makeModernSingleColumnTemplate,
+  makeTraditionalFormatTemplate,
+  makeSimpleTwoColumnTemplate,
+  makeCleanMinimalTemplate,
+  makeStandardProfessionalTemplate,
+  makeContemporarySingleColumnTemplate,
+  makeBalancedTwoColumnTemplate,
+  makeSimpleCleanFormatTemplate,
+} from "@/lib/cv-templates";
 
 import type { LeftTab } from "./CvDesigner";
-
-function makeModernTemplate(pageSize: "A4" | "LETTER"): CvElement[] {
-  const { width, height } = PAGE_DIMENSIONS[pageSize];
-  const elements: CvElement[] = [];
-  const baseFont = "var(--font-inter), Inter, Arial, sans-serif";
-
-  // Sidebar background
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "shape",
-    x: 0,
-    y: 0,
-    width: Math.round(width * 0.33),
-    height,
-    zIndex: 0,
-    fill: "#0B1220",
-  });
-
-  // Header strip
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "shape",
-    x: Math.round(width * 0.33),
-    y: 0,
-    width: width - Math.round(width * 0.33),
-    height: 150,
-    zIndex: 0,
-    fill: "#F8FAFC",
-  });
-
-  // Accent pill
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "shape",
-    x: Math.round(width * 0.33) + 24,
-    y: 26,
-    width: 96,
-    height: 10,
-    zIndex: 1,
-    fill: "#2563EB",
-    borderRadius: 999,
-  });
-
-  // Name
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: Math.round(width * 0.33) + 24,
-    y: 44,
-    width: width - (Math.round(width * 0.33) + 48),
-    height: 52,
-    zIndex: 30,
-    text: "Your Name",
-    fontSize: 34,
-    fontWeight: "bold",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#0F172A",
-  });
-
-  // Role line
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: Math.round(width * 0.33) + 24,
-    y: 96,
-    width: width - (Math.round(width * 0.33) + 48),
-    height: 22,
-    zIndex: 25,
-    text: "Job Title • Specialty • Keywords",
-    fontSize: 12,
-    fontWeight: "normal",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#334155",
-  });
-
-  // Contact line
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: Math.round(width * 0.33) + 24,
-    y: 118,
-    width: width - (Math.round(width * 0.33) + 48),
-    height: 24,
-    zIndex: 25,
-    text: "City • +44 7700 900000 • you@email.com • linkedin.com/in/you",
-    fontSize: 11,
-    fontWeight: "normal",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#475569",
-  });
-
-  // Sidebar headings
-  const sidebarX = 24;
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: sidebarX,
-    y: 40,
-    width: Math.round(width * 0.33) - 48,
-    height: 18,
-    zIndex: 20,
-    text: "PROFILE",
-    fontSize: 10,
-    fontWeight: "bold",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#93C5FD",
-  });
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: sidebarX,
-    y: 62,
-    width: Math.round(width * 0.33) - 48,
-    height: 140,
-    zIndex: 20,
-    text:
-      "Short summary that highlights your strengths, impact, and what role you want next. Keep it 3–5 lines.",
-    fontSize: 11,
-    fontWeight: "normal",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#E2E8F0",
-  });
-
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: sidebarX,
-    y: 220,
-    width: Math.round(width * 0.33) - 48,
-    height: 18,
-    zIndex: 20,
-    text: "SKILLS",
-    fontSize: 10,
-    fontWeight: "bold",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#93C5FD",
-  });
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: sidebarX,
-    y: 242,
-    width: Math.round(width * 0.33) - 48,
-    height: 160,
-    zIndex: 20,
-    text: "• Skill one\n• Skill two\n• Skill three\n• Tooling & Methods\n• Soft skills",
-    fontSize: 11,
-    fontWeight: "normal",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#E2E8F0",
-  });
-
-  // Main sections (simple)
-  const mainX = Math.round(width * 0.33) + 24;
-  const mainW = width - (Math.round(width * 0.33) + 48);
-
-  // Section pill as text-only (fill is done with shape)
-  const pill = (y: number, label: string) => {
-    const pillId = crypto.randomUUID();
-    const bgId = crypto.randomUUID();
-    elements.push({
-      id: bgId,
-      type: "shape",
-      x: mainX,
-      y,
-      width: mainW,
-      height: 28,
-      zIndex: 5,
-      fill: "#EEF2FF",
-      borderRadius: 999,
-    });
-    elements.push({
-      id: pillId,
-      type: "text",
-      x: mainX + 14,
-      y: y + 7,
-      width: mainW - 28,
-      height: 18,
-      zIndex: 10,
-      text: label.toUpperCase(),
-      fontSize: 11,
-      fontWeight: "bold",
-      align: "left",
-      fontFamily: baseFont,
-      color: "#1E3A8A",
-    });
-  };
-
-  pill(170, "Summary");
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: mainX,
-    y: 206,
-    width: mainW,
-    height: 90,
-    zIndex: 10,
-    text:
-      "A short professional summary. Mention years of experience, key strengths, and measurable outcomes.",
-    fontSize: 12,
-    fontWeight: "normal",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#334155",
-  });
-
-  pill(310, "Experience");
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: mainX,
-    y: 346,
-    width: mainW,
-    height: 200,
-    zIndex: 10,
-    text:
-      "Company — Role (YYYY–YYYY)\n• Achievement with numbers.\n• What you improved.\n• Tools/skills.\n\nCompany — Role (YYYY–YYYY)\n• Achievement.\n• Achievement.",
-    fontSize: 11,
-    fontWeight: "normal",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#334155",
-  });
-
-  pill(570, "Education");
-  elements.push({
-    id: crypto.randomUUID(),
-    type: "text",
-    x: mainX,
-    y: 606,
-    width: mainW,
-    height: 70,
-    zIndex: 10,
-    text: "Degree — University\nYYYY–YYYY",
-    fontSize: 11,
-    fontWeight: "normal",
-    align: "left",
-    fontFamily: baseFont,
-    color: "#334155",
-  });
-
-  return elements;
-}
 
 export function LeftPanel(props: {
   tab: LeftTab;
@@ -296,6 +62,15 @@ export function LeftPanel(props: {
           title="Templates"
         >
           <LayoutTemplate size={18} />
+        </button>
+        <button
+          onClick={() => onChangeTab("emojis")}
+          className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+            tab === "emojis" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"
+          }`}
+          title="Emojis & Icons"
+        >
+          <Smile size={18} />
         </button>
       </div>
 
@@ -464,28 +239,139 @@ export function LeftPanel(props: {
           <div className="space-y-4">
             <div>
               <div className="text-sm font-semibold text-gray-900">Templates</div>
-              <div className="text-xs text-gray-500">Start from a modern layout</div>
+              <div className="text-xs text-gray-500">ATS-friendly predesigned layouts</div>
             </div>
-            <button
-              onClick={() => onApplyTemplate(makeModernTemplate("A4"))}
-              className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
-            >
-              <div className="text-sm font-semibold text-gray-900">Modern template (A4)</div>
-              <div className="text-xs text-gray-500">Two-column, premium look</div>
-            </button>
-            <button
-              onClick={() => onApplyTemplate(makeModernTemplate("LETTER"))}
-              className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
-            >
-              <div className="text-sm font-semibold text-gray-900">Modern template (Letter)</div>
-              <div className="text-xs text-gray-500">Sized for US Letter</div>
-            </button>
-            <button
-              onClick={onClearCanvas}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"
-            >
-              Clear canvas
-            </button>
+            <div className="space-y-2 max-h-[calc(100vh-200px)] overflow-y-auto pr-2">
+              <button
+                onClick={() => onApplyTemplate(makeModernTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Modern Two-Column (A4)</div>
+                <div className="text-xs text-gray-500">Premium look, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeModernTemplate("LETTER"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Modern Two-Column (Letter)</div>
+                <div className="text-xs text-gray-500">US Letter size, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeClassicSingleColumnTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Classic Single Column</div>
+                <div className="text-xs text-gray-500">Traditional format, ATS-optimized</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeMinimalistCleanTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Minimalist Clean</div>
+                <div className="text-xs text-gray-500">Ultra clean, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeProfessionalTwoColumnTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Professional Two-Column</div>
+                <div className="text-xs text-gray-500">Traditional sidebar, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeExecutiveSingleColumnTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Executive Single Column</div>
+                <div className="text-xs text-gray-500">Executive style, ATS-optimized</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeModernSingleColumnTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Modern Single Column</div>
+                <div className="text-xs text-gray-500">Contemporary design, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeTraditionalFormatTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Traditional Format</div>
+                <div className="text-xs text-gray-500">Classic layout, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeSimpleTwoColumnTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Simple Two-Column</div>
+                <div className="text-xs text-gray-500">Clean sidebar, ATS-optimized</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeCleanMinimalTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Clean Minimal</div>
+                <div className="text-xs text-gray-500">Minimal design, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeStandardProfessionalTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Standard Professional</div>
+                <div className="text-xs text-gray-500">Professional format, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeContemporarySingleColumnTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Contemporary Single Column</div>
+                <div className="text-xs text-gray-500">Modern style, ATS-optimized</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeBalancedTwoColumnTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Balanced Two-Column</div>
+                <div className="text-xs text-gray-500">Balanced layout, ATS-friendly</div>
+              </button>
+              <button
+                onClick={() => onApplyTemplate(makeSimpleCleanFormatTemplate("A4"))}
+                className="w-full px-3 py-3 rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/40 text-left"
+              >
+                <div className="text-sm font-semibold text-gray-900">Simple Clean Format</div>
+                <div className="text-xs text-gray-500">Simple & clean, ATS-friendly</div>
+              </button>
+            </div>
+            <div className="pt-2 border-t border-gray-100">
+              <button
+                onClick={onClearCanvas}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm hover:bg-gray-50"
+              >
+                Clear canvas
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === "emojis" && (
+          <div className="space-y-4">
+            <div>
+              <div className="text-sm font-semibold text-gray-900">Emojis & Icons</div>
+              <div className="text-xs text-gray-500">Drag and drop onto canvas</div>
+            </div>
+            <EmojiIconPicker
+              onSelect={(emoji) => {
+                const page = { id: crypto.randomUUID(), elements: [] };
+                const next = addTextElement(page, {
+                  text: emoji,
+                  fontSize: 24,
+                  height: 32,
+                  width: 40,
+                  x: 200,
+                  y: 200,
+                });
+                onAddElements(next.elements);
+              }}
+            />
           </div>
         )}
       </div>

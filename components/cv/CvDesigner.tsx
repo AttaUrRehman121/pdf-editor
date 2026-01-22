@@ -10,7 +10,7 @@ import { CanvasStage } from "./CanvasStage";
 import { RightInspector } from "./RightInspector";
 import { makeModernTemplate } from "@/lib/cv-templates";
 
-export type LeftTab = "text" | "elements" | "templates";
+export type LeftTab = "text" | "elements" | "templates" | "emojis";
 
 type CvDesignerProps = {
   initialTemplate?: string;
