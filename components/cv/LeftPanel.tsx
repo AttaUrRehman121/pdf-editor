@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { LayoutTemplate, Shapes, Type, Smile, Image as ImageIcon, Settings } from "lucide-react";
+import React, { useState } from "react";
+import { LayoutTemplate, Shapes, Type, Smile, Image as ImageIcon, Settings, ChevronLeft } from "lucide-react";
 import type { CvElement } from "@/lib/cv-model";
 import { addBodyTextElement, addShapeElement, addTextElement, addImageElement } from "@/lib/cv-model";
 import { EmojiIconPicker } from "@/components/EmojiIconPicker";
@@ -44,12 +44,19 @@ export function LeftPanel(props: {
 }) {
   const { tab, onChangeTab, onClearCanvas, onApplyTemplate, onAddElements, watermark, onWatermarkChange } = props;
 
+  const [expanded, setExpanded] = useState(false);
+
+  const handleIconClick = (t: LeftTab) => {
+    onChangeTab(t);
+    setExpanded(true);
+  };
+
   return (
     <div className="flex border-r border-gray-200 bg-white">
-      {/* Icon rail */}
+      {/* Icon rail – always visible */}
       <div className="w-14 flex flex-col items-center py-3 gap-2 border-r border-gray-100">
         <button
-          onClick={() => onChangeTab("text")}
+          onClick={() => handleIconClick("text")}
           className={`w-10 h-10 rounded-lg flex items-center justify-center ${
             tab === "text" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"
           }`}
@@ -58,7 +65,7 @@ export function LeftPanel(props: {
           <Type size={18} />
         </button>
         <button
-          onClick={() => onChangeTab("elements")}
+          onClick={() => handleIconClick("elements")}
           className={`w-10 h-10 rounded-lg flex items-center justify-center ${
             tab === "elements" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"
           }`}
@@ -67,7 +74,7 @@ export function LeftPanel(props: {
           <Shapes size={18} />
         </button>
         <button
-          onClick={() => onChangeTab("templates")}
+          onClick={() => handleIconClick("templates")}
           className={`w-10 h-10 rounded-lg flex items-center justify-center ${
             tab === "templates" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"
           }`}
@@ -76,7 +83,7 @@ export function LeftPanel(props: {
           <LayoutTemplate size={18} />
         </button>
         <button
-          onClick={() => onChangeTab("emojis")}
+          onClick={() => handleIconClick("emojis")}
           className={`w-10 h-10 rounded-lg flex items-center justify-center ${
             tab === "emojis" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"
           }`}
@@ -85,7 +92,7 @@ export function LeftPanel(props: {
           <Smile size={18} />
         </button>
         <button
-          onClick={() => onChangeTab("settings")}
+          onClick={() => handleIconClick("settings")}
           className={`w-10 h-10 rounded-lg flex items-center justify-center ${
             tab === "settings" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-gray-50"
           }`}
@@ -95,8 +102,20 @@ export function LeftPanel(props: {
         </button>
       </div>
 
-      {/* Panel */}
-      <div className="w-72 p-4 overflow-auto">
+      {/* Panel – only visible when expanded */}
+      {expanded && (
+        <div className="w-[min(18rem,calc(100vw-3.5rem))] flex flex-col overflow-hidden">
+          <div className="h-10 flex items-center justify-between px-2 border-b border-gray-100 shrink-0">
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 hover:bg-gray-100"
+              title="Collapse panel"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          </div>
+          <div className="flex-1 p-4 overflow-auto">
         {tab === "text" && (
           <div className="space-y-4">
             <div>
@@ -562,7 +581,9 @@ export function LeftPanel(props: {
             </div>
           </div>
         )}
-      </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -145,7 +145,9 @@ export const extractTextFromPDF = async (
   const pdf = await loadingTask.promise;
   const totalPages = pdf.numPages;
   const page = await pdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale: 1.5 }); // Scale 1.5 for better readability
+  // Use scale=1 to return the raw page size (PDF points).
+  // Rendering scale is handled in the editor so we can be responsive on mobile.
+  const viewport = page.getViewport({ scale: 1 });
 
   // 3. Get Text Content
   const textContent = await page.getTextContent();

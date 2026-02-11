@@ -103,13 +103,29 @@ export function PdfRightInspector(props: {
   onUpdateImage: (updates: Partial<ImageItem>) => void;
   onDeleteText: () => void;
   onDeleteImage: () => void;
+  variant?: "sidebar" | "sheet";
+  containerClassName?: string;
 }) {
-  const { selectedText, selectedImage, onUpdateText, onUpdateImage, onDeleteText, onDeleteImage } = props;
+  const {
+    selectedText,
+    selectedImage,
+    onUpdateText,
+    onUpdateImage,
+    onDeleteText,
+    onDeleteImage,
+    variant = "sidebar",
+    containerClassName,
+  } = props;
 
   const hasSelection = selectedText || selectedImage;
 
+  const base =
+    variant === "sheet"
+      ? "w-full bg-white p-4 overflow-auto"
+      : "w-72 bg-white border-l border-gray-200 p-4 overflow-auto";
+
   return (
-    <div className="w-72 bg-white border-l border-gray-200 p-4 overflow-auto">
+    <div className={`${base} ${containerClassName ?? ""}`.trim()}>
       <div className="text-sm font-semibold text-gray-900 mb-4">Properties</div>
 
       {!hasSelection && (

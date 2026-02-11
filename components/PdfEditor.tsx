@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useRef, useState, useEffect } from "react";
-import { Download, Upload, Image as ImageIcon, X, Maximize2, RotateCw, RotateCcw } from "lucide-react";
+import { Download, Upload, Image as ImageIcon, X, Maximize2, RotateCw, RotateCcw, PanelLeft, SlidersHorizontal } from "lucide-react";
 import { CvDesigner } from "@/components/cv/CvDesigner";
 import { PdfLeftPanel } from "@/components/PdfLeftPanel";
 import { PdfRightInspector } from "@/components/PdfRightInspector";
+import { MobileDrawer } from "@/components/ui/MobileDrawer";
+import { MobileSheet } from "@/components/ui/MobileSheet";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import {
   extractTextFromPDF,
   pdfPointToHtmlPoint,
@@ -50,9 +53,18 @@ const colorToHexForInput = (color: string | undefined | null): string => {
 export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorProps) {
   const [mode, setMode] = useState<EditorMode>(initialMode === "cv" ? "cv" : "pdf");
   const [leftTab, setLeftTab] = useState<"upload" | "text" | "images" | "emojis" | "tools">("upload");
+  const isMobile = useMediaQuery("(max-width: 900px)");
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+  const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
+  const autoOpenedMobileLeftOnceRef = useRef(false);
 
   const [items, setItems] = useState<TextItem[]>([]);
   const [images, setImages] = useState<ImageItem[]>([]);
+  // Raw PDF page size (PDF points)
+  const [pdfPageSize, setPdfPageSize] = useState({ width: 0, height: 0 });
+  // Rendering scale for canvas + overlays
+  const [pdfScale, setPdfScale] = useState(1.5);
+  // Scaled (CSS pixel) dimensions for rendering
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const [originalPdfBytes, setOriginalPdfBytes] = useState<ArrayBuffer | null>(null);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
@@ -105,11 +117,17 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const isPdfMode = mode === "pdf";
 
   // 2. Render PDF to Canvas (Visual Background Only)
-  const renderPdfBackground = async (url: string, currentItems?: TextItem[], pageNum: number = currentPage) => {
+  const renderPdfBackground = async (
+    url: string,
+    currentItems?: TextItem[],
+    pageNum: number = currentPage,
+    scaleOverride?: number
+  ) => {
     const loadingTask = (pdfjsLib as any).getDocument(url);
     const pdf = await loadingTask.promise;
     const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.5 });
+    const scale = scaleOverride ?? pdfScale;
+    const viewport = page.getViewport({ scale });
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -146,7 +164,29 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       const timer = setTimeout(checkAndRender, 50);
       return () => clearTimeout(timer);
     }
-  }, [isPdfMode, fileUrl]); // Re-run when mode or fileUrl changes
+  }, [isPdfMode, fileUrl, pdfScale, currentPage]); // Re-run when mode, fileUrl, scale, or page changes
+
+  // Mobile overlays: reset when leaving mobile, and auto-open tools once when no file yet.
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileLeftOpen(false);
+      setMobilePropsOpen(false);
+      autoOpenedMobileLeftOnceRef.current = false;
+      // Avoid changing scale when a file is already loaded (would desync image coordinates).
+      if (!fileUrl) setPdfScale(1.5);
+      return;
+    }
+
+    if (!fileUrl && !autoOpenedMobileLeftOnceRef.current) {
+      autoOpenedMobileLeftOnceRef.current = true;
+      setMobileLeftOpen(true);
+      setMobilePropsOpen(false);
+    }
+
+    if (fileUrl) {
+      autoOpenedMobileLeftOnceRef.current = false;
+    }
+  }, [isMobile, fileUrl]);
 
   // Generate thumbnail for a specific page
   const generatePageThumbnail = async (url: string, pageNum: number): Promise<string> => {
@@ -196,7 +236,12 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     const { items: extractedItems, width, height, originalPdfBytes, totalPages: pages } = await extractTextFromPDF(url, 1);
     setTotalPages(pages);
     setItems(extractedItems);
-    setPdfDimensions({ width, height });
+    // width/height returned are raw page size (scale=1)
+    setPdfPageSize({ width, height });
+    const availableWidth = Math.max(320, (typeof window !== "undefined" ? window.innerWidth : 900) - 24);
+    const nextScale = isMobile ? Math.max(0.6, Math.min(1.5, availableWidth / width)) : 1.5;
+    setPdfScale(nextScale);
+    setPdfDimensions({ width: width * nextScale, height: height * nextScale });
     setOriginalPdfBytes(originalPdfBytes);
 
     // Generate front page thumbnail immediately for display
@@ -209,7 +254,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       setShowPageSelector(true);
     } else {
       // Render Background Canvas and detect actual background colors
-      renderPdfBackground(url, extractedItems, 1);
+      renderPdfBackground(url, extractedItems, 1, nextScale);
     }
   };
 
@@ -227,10 +272,14 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     // Extract Data from selected page
     const { items: extractedItems, width, height } = await extractTextFromPDF(fileUrl, pageNum);
     setItems(extractedItems);
-    setPdfDimensions({ width, height });
+    setPdfPageSize({ width, height });
+    const availableWidth = Math.max(320, (typeof window !== "undefined" ? window.innerWidth : 900) - 24);
+    const nextScale = isMobile ? Math.max(0.6, Math.min(1.5, availableWidth / width)) : 1.5;
+    setPdfScale(nextScale);
+    setPdfDimensions({ width: width * nextScale, height: height * nextScale });
 
     // Render Background Canvas and detect actual background colors
-    renderPdfBackground(fileUrl, extractedItems, pageNum);
+    renderPdfBackground(fileUrl, extractedItems, pageNum, nextScale);
   };
 
   const detectBackgroundColors = (
@@ -238,7 +287,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     itemsToColor: TextItem[],
     pageHeight: number
   ) => {
-    const scale = 1.5;
+    const scale = pdfScale;
     const updated = itemsToColor.map((item) => {
       const { x: htmlX, y: htmlY } = pdfPointToHtmlPoint(item.x, item.y, {
         scale,
@@ -326,7 +375,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const handleAddEmoji = (emoji: string, screenX: number, screenY: number) => {
     if (!fileUrl || !pdfDimensions.width || !canvasRef.current) return;
     
-    const scale = 1.5;
+    const scale = pdfScale;
     const canvasRect = canvasRef.current.getBoundingClientRect();
     
     // Get relative position within canvas
@@ -343,7 +392,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     const fontSize = 36; // Larger size for better visibility
     const pdfX = relativeX / scale;
     const htmlY = relativeY;
-    const viewportHeight = pdfDimensions.height * scale;
+    const viewportHeight = pdfDimensions.height;
     // Reverse the pdfPointToHtmlPoint formula: htmlY = viewportHeight - pdfY * scale - fontSize * scale
     // So: pdfY = (viewportHeight - htmlY - fontSize * scale) / scale
     const pdfY = (viewportHeight - htmlY - fontSize * scale) / scale;
@@ -351,8 +400,8 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     const newTextItem: TextItem = {
       id: crypto.randomUUID(),
       text: emoji,
-      x: Math.max(0, Math.min(pdfX, pdfDimensions.width - 50)), // Ensure within bounds
-      y: Math.max(0, Math.min(pdfY, pdfDimensions.height - 50)), // Ensure within bounds
+      x: Math.max(0, Math.min(pdfX, (pdfPageSize.width || pdfX + 1) - 50)), // Ensure within bounds
+      y: Math.max(0, Math.min(pdfY, (pdfPageSize.height || pdfY + 1) - 50)), // Ensure within bounds
       width: 50, // Wider for better visibility
       height: fontSize * 1.2, // Height based on font size
       fontSize: fontSize,
@@ -380,7 +429,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       const imageBytes = new Uint8Array(arrayBuffer);
       const blobUrl = URL.createObjectURL(file);
 
-      const scale = 1.5;
+      const scale = pdfScale;
       const newImage: ImageItem = {
         id: crypto.randomUUID(),
         x: pdfDimensions.width / 2 - 50, // Center initially
@@ -404,8 +453,8 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     );
   };
 
-  // Handle corner resize
-  const handleCornerResize = (e: React.MouseEvent, id: string, direction: "nw" | "ne" | "sw" | "se") => {
+  // Handle corner resize (pointer events for mobile touch support)
+  const handleCornerResize = (e: React.PointerEvent, id: string, direction: "nw" | "ne" | "sw" | "se") => {
     e.preventDefault();
     e.stopPropagation();
     const image = images.find((img) => img.id === id);
@@ -414,7 +463,6 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     setSelectedImageId(id);
     setIsResizing(true);
     setResizeDirection(direction);
-    const canvasRect = canvasRef.current.getBoundingClientRect();
     resizeStartRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -424,11 +472,11 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       imageY: image.y,
     };
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handlePointerMove = (moveEvent: PointerEvent) => {
       if (!canvasRef.current) return;
       const start = resizeStartRef.current;
-      const deltaX = (moveEvent.clientX - start.x) / 1.5; // Account for scale
-      const deltaY = (moveEvent.clientY - start.y) / 1.5;
+      const deltaX = (moveEvent.clientX - start.x) / pdfScale; // Account for scale
+      const deltaY = (moveEvent.clientY - start.y) / pdfScale;
 
       let newWidth = start.width;
       let newHeight = start.height;
@@ -477,18 +525,18 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       );
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsResizing(false);
       setResizeDirection("");
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
   };
 
-  const handleSideResize = (e: React.MouseEvent, id: string, direction: "n" | "s" | "e" | "w") => {
+  const handleSideResize = (e: React.PointerEvent, id: string, direction: "n" | "s" | "e" | "w") => {
     e.preventDefault();
     e.stopPropagation();
     const image = images.find((img) => img.id === id);
@@ -497,7 +545,6 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     setSelectedImageId(id);
     setIsResizing(true);
     setResizeDirection(direction);
-    const canvasRect = canvasRef.current.getBoundingClientRect();
     resizeStartRef.current = {
       x: e.clientX,
       y: e.clientY,
@@ -507,11 +554,11 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       imageY: image.y,
     };
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
+    const handlePointerMove = (moveEvent: PointerEvent) => {
       if (!canvasRef.current) return;
       const start = resizeStartRef.current;
-      const deltaX = (moveEvent.clientX - start.x) / 1.5;
-      const deltaY = (moveEvent.clientY - start.y) / 1.5;
+      const deltaX = (moveEvent.clientX - start.x) / pdfScale;
+      const deltaY = (moveEvent.clientY - start.y) / pdfScale;
 
       let newWidth = start.width;
       let newHeight = start.height;
@@ -552,15 +599,15 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
       );
     };
 
-    const handleMouseUp = () => {
+    const handlePointerUp = () => {
       setIsResizing(false);
       setResizeDirection("");
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      document.removeEventListener("pointermove", handlePointerMove);
+      document.removeEventListener("pointerup", handlePointerUp);
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("pointermove", handlePointerMove);
+    document.addEventListener("pointerup", handlePointerUp);
   };
 
   // 6. Handle Image Delete
@@ -573,22 +620,20 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     if (selectedImageId === id) setSelectedImageId(null);
   };
 
-  // 7. Handle Image Drag
-  const handleImageMouseDown = (e: React.MouseEvent, id: string) => {
+  // 7. Handle Image Drag (pointer events for mobile touch support)
+  const handleImagePointerDown = (e: React.PointerEvent, id: string) => {
     e.preventDefault();
     setSelectedImageId(id);
     setIsDragging(true);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const canvasRect = canvasRef.current?.getBoundingClientRect();
-    if (canvasRect) {
-      setDragStart({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-    }
+    setDragStart({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
 
-  const handleImageMouseMove = (e: React.MouseEvent) => {
+  const handleImagePointerMove = (e: React.PointerEvent) => {
     if ((!isDragging || isResizing) || !selectedImageId || !canvasRef.current) return;
 
     const canvasRect = canvasRef.current.getBoundingClientRect();
@@ -608,7 +653,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     );
   };
 
-  const handleImageMouseUp = () => {
+  const handleImagePointerUp = () => {
     setIsDragging(false);
   };
 
@@ -616,7 +661,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
   const handleDownload = async () => {
     if (!originalPdfBytes) return;
     // Convert image positions from screen (scaled, top-left) to PDF coordinates (unscaled, bottom-left)
-    const scale = 1.5;
+    const scale = pdfScale;
     const imagesForPdf = images.map((img) => {
       const x = img.x / scale;
       const y = (pdfDimensions.height - (img.y + img.height)) / scale; // bottom-left origin
@@ -641,29 +686,33 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
     <div className="min-h-screen bg-gradient-to-b from-[#0f172a] via-[#020617] to-[#020617] flex flex-col">
       {/* Top App Bar */}
       <header className="w-full border-b border-slate-800/80 bg-slate-950/40 backdrop-blur px-4 md:px-8 lg:px-12 py-3 flex items-center justify-between gap-4 text-white">
-        <div className="flex items-center gap-3">
-          <div className="text-sm font-semibold text-slate-50">Editor</div>
-          <div className="h-6 w-px bg-slate-700/80" />
-          <div className="inline-flex rounded-lg bg-white/5 p-1 ring-1 ring-slate-700/70">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+          <div className="text-sm font-semibold text-slate-50 shrink-0">Editor</div>
+          <div className="h-6 w-px bg-slate-700/80 shrink-0" />
+          <div className="inline-flex rounded-lg bg-white/5 p-1 ring-1 ring-slate-700/70 shrink-0">
             <button
               onClick={() => setMode("pdf")}
-              className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-semibold rounded-md ${
+              className={`px-2 md:px-4 py-1.5 text-xs md:text-sm font-semibold rounded-md whitespace-nowrap ${
                 isPdfMode ? "bg-teal-500 text-slate-950 shadow-sm" : "text-slate-200 hover:bg-white/10"
               }`}
             >
-              PDF editor
+              <span className="hidden sm:inline">PDF editor</span>
+              <span className="sm:hidden">PDF</span>
             </button>
             <button
               onClick={() => setMode("cv")}
-              className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-semibold rounded-md ${
+              className={`px-2 md:px-4 py-1.5 text-xs md:text-sm font-semibold rounded-md whitespace-nowrap ${
                 !isPdfMode ? "bg-teal-500 text-slate-950 shadow-sm" : "text-slate-200 hover:bg-white/10"
               }`}
             >
-              CV designer (Canva style)
+              <span className="hidden sm:inline">CV designer (Canva style)</span>
+              <span className="sm:hidden">CV</span>
             </button>
           </div>
         </div>
-        <div className="text-xs text-slate-300/80">Build resumes faster with AI & precise PDF editing.</div>
+        <div className="text-xs text-slate-300/80 hidden md:block shrink-0">
+          Build resumes faster with AI & precise PDF editing.
+        </div>
       </header>
 
       {/* PDF EDITOR MODE */}
@@ -686,44 +735,76 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
           />
 
           {/* Top Toolbar */}
-          <div className="h-14 bg-white border-b border-gray-200 flex items-center px-4 gap-3">
-            <div className="text-sm font-semibold text-gray-900">PDF Editor</div>
-            <div className="h-6 w-px bg-gray-200" />
+          <div className="h-14 bg-white border-b border-gray-200 flex items-center px-3 sm:px-4 gap-2 sm:gap-3 overflow-hidden">
+            <div className="text-sm font-semibold text-gray-900 shrink-0 hidden min-[400px]:block">PDF Editor</div>
+            <div className="h-6 w-px bg-gray-200 shrink-0 hidden min-[400px]:block" />
+            {isMobile && (
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileLeftOpen(true);
+                    setMobilePropsOpen(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 hover:bg-gray-50 text-sm font-semibold"
+                  title="Open tools"
+                >
+                  <PanelLeft size={16} className="shrink-0" />
+                  <span className="hidden sm:inline">Tools</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobilePropsOpen(true);
+                    setMobileLeftOpen(false);
+                  }}
+                  className="inline-flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 hover:bg-gray-50 text-sm font-semibold"
+                  title="Open properties"
+                >
+                  <SlidersHorizontal size={16} className="shrink-0" />
+                  <span className="hidden sm:inline">Properties</span>
+                </button>
+              </div>
+            )}
+            <div className="flex-1 min-w-0" />
             <button
               onClick={handleDownload}
               disabled={!fileUrl}
-              className="flex items-center gap-2 px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-teal-500 text-white rounded-lg hover:bg-teal-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold shrink-0"
             >
-              <Download size={16} />
-              Download PDF
+              <Download size={16} className="shrink-0" />
+              <span className="hidden min-[360px]:inline">Download PDF</span>
+              <span className="min-[360px]:hidden">Download</span>
             </button>
           </div>
 
           {/* Main Editor Layout */}
           <div className="flex h-[calc(100vh-6rem)]">
             {/* Left Panel */}
-            <PdfLeftPanel
-              tab={leftTab}
-              onChangeTab={setLeftTab}
-              onUploadPdf={handleFileUpload}
-              onAddImage={handleImageUpload}
-              onAddEmoji={handleAddEmoji}
-              fileUrl={fileUrl}
-              pdfFileName={pdfFileName}
-              totalPages={totalPages}
-              currentPage={currentPage}
-              onFileClick={() => {
-                if (totalPages > 1) {
-                  setShowPageSelector(true);
-                }
-              }}
-              frontPageThumbnail={frontPageThumbnail}
-              watermark={watermark}
-              onWatermarkChange={setWatermark}
-            />
+            {!isMobile && (
+              <PdfLeftPanel
+                tab={leftTab}
+                onChangeTab={setLeftTab}
+                onUploadPdf={handleFileUpload}
+                onAddImage={handleImageUpload}
+                onAddEmoji={handleAddEmoji}
+                fileUrl={fileUrl}
+                pdfFileName={pdfFileName}
+                totalPages={totalPages}
+                currentPage={currentPage}
+                onFileClick={() => {
+                  if (totalPages > 1) {
+                    setShowPageSelector(true);
+                  }
+                }}
+                frontPageThumbnail={frontPageThumbnail}
+                watermark={watermark}
+                onWatermarkChange={setWatermark}
+              />
+            )}
 
             {/* Canvas Area */}
-            {fileUrl && (
+            {fileUrl ? (
               <div 
                 className="flex-1 overflow-auto flex justify-center px-2 bg-gray-50"
                 onDragOver={(e) => e.preventDefault()}
@@ -754,6 +835,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
               >
                 <div 
                   className="relative inline-block shadow-xl border border-gray-300 bg-white"
+                  style={{ touchAction: "none" }}
                   onClick={(e) => {
                     // Deselect when clicking on the canvas container itself (but not on elements)
                     if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === "CANVAS") {
@@ -767,7 +849,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
 
                   {/* Layer B: Inputs (Editable) with sampled background + native look */}
                   {items.map((item) => {
-                  const scale = 1.5;
+                  const scale = pdfScale;
                   const { x: htmlX, y: htmlY } = pdfPointToHtmlPoint(item.x, item.y, {
                     scale,
                     viewportHeight: pdfDimensions.height,
@@ -878,16 +960,17 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                   return (
                     <div
                       key={image.id}
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         // Don't start drag if clicking on resize handle
                         if ((e.target as HTMLElement).classList.contains("resize-handle")) {
                           return;
                         }
-                        handleImageMouseDown(e, image.id);
+                        handleImagePointerDown(e, image.id);
                       }}
-                      onMouseMove={handleImageMouseMove}
-                      onMouseUp={handleImageMouseUp}
-                      onMouseLeave={handleImageMouseUp}
+                      onPointerMove={handleImagePointerMove}
+                      onPointerUp={handleImagePointerUp}
+                      onPointerLeave={handleImagePointerUp}
+                      onPointerCancel={handleImagePointerUp}
                       style={{
                         position: "absolute",
                         left: `${image.x}px`,
@@ -921,7 +1004,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           {/* Corner Resize Handles */}
                           <div
                             className="resize-handle absolute -top-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nwse-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleCornerResize(e, image.id, "nw");
                             }}
@@ -929,7 +1012,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           />
                           <div
                             className="resize-handle absolute -top-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nesw-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleCornerResize(e, image.id, "ne");
                             }}
@@ -937,7 +1020,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           />
                           <div
                             className="resize-handle absolute -bottom-1 -left-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nesw-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleCornerResize(e, image.id, "sw");
                             }}
@@ -945,7 +1028,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           />
                           <div
                             className="resize-handle absolute -bottom-1 -right-1 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-nwse-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleCornerResize(e, image.id, "se");
                             }}
@@ -955,7 +1038,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           {/* Side Resize Handles */}
                           <div
                             className="resize-handle absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ns-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleSideResize(e, image.id, "n");
                             }}
@@ -963,7 +1046,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           />
                           <div
                             className="resize-handle absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ns-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleSideResize(e, image.id, "s");
                             }}
@@ -971,7 +1054,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           />
                           <div
                             className="resize-handle absolute -left-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ew-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleSideResize(e, image.id, "w");
                             }}
@@ -979,7 +1062,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                           />
                           <div
                             className="resize-handle absolute -right-1 top-1/2 -translate-y-1/2 w-3 h-3 bg-blue-500 border border-white rounded-sm cursor-ew-resize z-50"
-                            onMouseDown={(e) => {
+                            onPointerDown={(e) => {
                               e.stopPropagation();
                               handleSideResize(e, image.id, "e");
                             }}
@@ -1060,37 +1143,126 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                   })}
                 </div>
               </div>
+            ) : (
+              <div className="flex-1 bg-gray-50 flex items-center justify-center p-6">
+                <div className="max-w-md w-full text-center">
+                  <div className="text-lg font-semibold text-gray-900">Upload a PDF to start editing</div>
+                  <div className="text-sm text-gray-600 mt-2">
+                    {isMobile ? "Tap Tools to upload a PDF, then edit on the canvas." : "Use the left panel to upload a PDF."}
+                  </div>
+                  {isMobile && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileLeftOpen(true);
+                        setMobilePropsOpen(false);
+                      }}
+                      className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                    >
+                      <PanelLeft size={16} />
+                      Open Tools
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
 
-            {/* Right Panel */}
-            <PdfRightInspector
-              selectedText={selectedTextId ? items.find((i) => i.id === selectedTextId) || null : null}
-              selectedImage={selectedImageId ? images.find((i) => i.id === selectedImageId) || null : null}
-              onUpdateText={(updates) => {
-                if (selectedTextId) {
-                  updateSelectedTextFormat(updates);
-                }
-              }}
-              onUpdateImage={(updates) => {
-                if (selectedImageId) {
-                  setImages((prev) =>
-                    prev.map((img) => (img.id === selectedImageId ? { ...img, ...updates } : img))
-                  );
-                }
-              }}
-              onDeleteText={() => {
-                if (selectedTextId) {
-                  setItems((prev) => prev.filter((item) => item.id !== selectedTextId));
-                  setSelectedTextId(null);
-                }
-              }}
-              onDeleteImage={() => {
-                if (selectedImageId) {
-                  handleImageDelete(selectedImageId);
-                }
-              }}
-            />
+            {/* Right Panel – only show when an element is selected */}
+            {!isMobile && (selectedTextId || selectedImageId) && (
+              <PdfRightInspector
+                selectedText={selectedTextId ? items.find((i) => i.id === selectedTextId) || null : null}
+                selectedImage={selectedImageId ? images.find((i) => i.id === selectedImageId) || null : null}
+                onUpdateText={(updates) => {
+                  if (selectedTextId) {
+                    updateSelectedTextFormat(updates);
+                  }
+                }}
+                onUpdateImage={(updates) => {
+                  if (selectedImageId) {
+                    setImages((prev) =>
+                      prev.map((img) => (img.id === selectedImageId ? { ...img, ...updates } : img))
+                    );
+                  }
+                }}
+                onDeleteText={() => {
+                  if (selectedTextId) {
+                    setItems((prev) => prev.filter((item) => item.id !== selectedTextId));
+                    setSelectedTextId(null);
+                  }
+                }}
+                onDeleteImage={() => {
+                  if (selectedImageId) {
+                    handleImageDelete(selectedImageId);
+                  }
+                }}
+              />
+            )}
           </div>
+
+          {isMobile && (
+            <>
+              <MobileDrawer
+                open={mobileLeftOpen}
+                onClose={() => setMobileLeftOpen(false)}
+                ariaLabel="Tools"
+              >
+                <PdfLeftPanel
+                  tab={leftTab}
+                  onChangeTab={setLeftTab}
+                  onUploadPdf={handleFileUpload}
+                  onAddImage={handleImageUpload}
+                  onAddEmoji={handleAddEmoji}
+                  fileUrl={fileUrl}
+                  pdfFileName={pdfFileName}
+                  totalPages={totalPages}
+                  currentPage={currentPage}
+                  onFileClick={() => {
+                    if (totalPages > 1) {
+                      setShowPageSelector(true);
+                    }
+                  }}
+                  frontPageThumbnail={frontPageThumbnail}
+                  watermark={watermark}
+                  onWatermarkChange={setWatermark}
+                />
+              </MobileDrawer>
+
+              <MobileSheet
+                open={mobilePropsOpen}
+                onClose={() => setMobilePropsOpen(false)}
+                ariaLabel="Properties"
+              >
+                <PdfRightInspector
+                  variant="sheet"
+                  selectedText={selectedTextId ? items.find((i) => i.id === selectedTextId) || null : null}
+                  selectedImage={selectedImageId ? images.find((i) => i.id === selectedImageId) || null : null}
+                  onUpdateText={(updates) => {
+                    if (selectedTextId) {
+                      updateSelectedTextFormat(updates);
+                    }
+                  }}
+                  onUpdateImage={(updates) => {
+                    if (selectedImageId) {
+                      setImages((prev) =>
+                        prev.map((img) => (img.id === selectedImageId ? { ...img, ...updates } : img))
+                      );
+                    }
+                  }}
+                  onDeleteText={() => {
+                    if (selectedTextId) {
+                      setItems((prev) => prev.filter((item) => item.id !== selectedTextId));
+                      setSelectedTextId(null);
+                    }
+                  }}
+                  onDeleteImage={() => {
+                    if (selectedImageId) {
+                      handleImageDelete(selectedImageId);
+                    }
+                  }}
+                />
+              </MobileSheet>
+            </>
+          )}
         </>
       )}
 

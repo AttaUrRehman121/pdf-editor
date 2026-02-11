@@ -180,7 +180,8 @@ export function CanvasStage(props: {
     }
   }, [elements, editingId]);
 
-  const getPointerInPage = (e: React.MouseEvent) => {
+  type PointerLike = { clientX: number; clientY: number };
+  const getPointerInPage = (e: PointerLike) => {
     const pageRect = pageRef.current?.getBoundingClientRect();
     if (!pageRect) return null;
     const x = (e.clientX - pageRect.left) / zoom;
@@ -188,7 +189,7 @@ export function CanvasStage(props: {
     return { x, y };
   };
 
-  const onMouseMove = (e: React.MouseEvent) => {
+  const onPointerMove = (e: React.PointerEvent) => {
     const p = getPointerInPage(e);
     if (!p) return;
 
@@ -248,7 +249,7 @@ export function CanvasStage(props: {
     );
   };
 
-  const onMouseUp = () => {
+  const onPointerUp = () => {
     setDraggingId(null);
     setResizeState(null);
   };
@@ -257,9 +258,10 @@ export function CanvasStage(props: {
     <div
       ref={containerRef}
       className="flex-1 bg-[#F3F4F6] overflow-auto"
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerUp}
+      onPointerCancel={onPointerUp}
       onClick={(e) => {
         // Deselect when clicking outside the page element
         const target = e.target as HTMLElement;
@@ -413,7 +415,7 @@ export function CanvasStage(props: {
       }}
     >
       <div 
-        className="min-h-full min-w-full flex items-start justify-center p-10"
+        className="min-h-full min-w-full flex items-start justify-center p-3 sm:p-6 md:p-10"
         onClick={(e) => {
           // Deselect when clicking on the padding area (outside page but inside container)
           const target = e.target as HTMLElement;
@@ -429,9 +431,9 @@ export function CanvasStage(props: {
           style={{
             width: pageDims.width * zoom,
             height: pageDims.height * zoom,
-            transformOrigin: "top left",
+            touchAction: "none",
           }}
-          onMouseDown={(e) => {
+          onPointerDown={(e) => {
             // click empty -> deselect
             if (e.target === e.currentTarget) {
               onSelect(null);
@@ -444,133 +446,93 @@ export function CanvasStage(props: {
             }
           }}
         >
+          {/* Zoom wrapper: scale content exactly once */}
           <div
-            className="absolute inset-0"
+            className="absolute left-0 top-0"
             style={{
+              width: pageDims.width,
+              height: pageDims.height,
               transform: `scale(${zoom})`,
               transformOrigin: "top left",
-              backgroundImage:
-                "radial-gradient(circle at 1px 1px, rgba(148,163,184,0.18) 1px, transparent 0)",
-              backgroundSize: "18px 18px",
             }}
-          />
-
-          {/* Elements layer (scaled) */}
-          <div
-            className="absolute inset-0"
-            style={{ transform: `scale(${zoom})`, transformOrigin: "top left" }}
           >
-            {sorted.map((el) => {
-              const isSelected = el.id === selectedId;
-              const locked = !!el.locked;
-              return (
-                <div
-                  key={el.id}
-                  className={clsx("absolute", isSelected && "ring-2 ring-blue-500 ring-offset-1")}
-                  style={{
-                    left: el.x,
-                    top: el.y,
-                    width: el.width,
-                    height: el.height,
-                    cursor: locked ? "not-allowed" : draggingId === el.id ? "grabbing" : "grab",
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (locked) return;
-                    onSelect(el.id);
-                  }}
-                  onMouseDown={(e) => {
-                    e.stopPropagation();
-                    if (locked) return;
-                    onSelect(el.id);
-                    const p = getPointerInPage(e);
-                    if (!p) return;
-                    if (resizeState) return;
-                    setDraggingId(el.id);
-                    setDragOffset({ x: p.x - el.x, y: p.y - el.y });
-                  }}
-                >
-                  {el.type === "shape" ? (
-                    <div
-                      className="w-full h-full"
-                      style={{
-                        backgroundColor: el.fill,
-                        borderRadius: el.borderRadius ?? 0,
-                      }}
-                    />
-                  ) : el.type === "image" ? (
-                    <img
-                      src={el.imageData}
-                      alt="CV Image"
-                      className="w-full h-full object-contain"
-                      style={{
-                        transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
-                        opacity: el.opacity ?? 1,
-                        pointerEvents: "none",
-                        userSelect: "none",
-                      }}
-                      draggable={false}
-                    />
-                  ) : (
-                    <div
-                      ref={(node) => {
-                        textNodeById.current[el.id] = node;
-                      }}
-                      className="w-full h-full px-2 py-1 outline-none"
-                      contentEditable
-                      suppressContentEditableWarning
-                      spellCheck={false}
-                      onFocus={() => setEditingId(el.id)}
-                      onBlur={(e) => {
-                        setEditingId((prev) => (prev === el.id ? null : prev));
-                        const nextText = (e.currentTarget as HTMLDivElement).innerText;
-                        onChangeElements(
-                          elements.map((it) =>
-                            it.id === el.id && it.type === "text"
-                              ? ({
-                                  ...it,
-                                  text: nextText,
-                                  height: computeAutoHeight(nextText, it.fontSize),
-                                } as CvElement)
-                              : it
-                          )
-                        );
-                      }}
-                      onInput={(e) => {
-                        const nextText = (e.currentTarget as HTMLDivElement).innerText;
-                        onChangeElements(
-                          elements.map((it) =>
-                            it.id === el.id && it.type === "text"
-                              ? ({
-                                  ...it,
-                                  text: nextText,
-                                  height: computeAutoHeight(nextText, it.fontSize),
-                                } as CvElement)
-                              : it
-                          )
-                        );
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key !== "Enter") return;
-                        if (el.type !== "text") return;
-                        const style = el.listStyle ?? "none";
-                        if (style === "none") return;
+            {/* Background grid */}
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 1px 1px, rgba(148,163,184,0.18) 1px, transparent 0)",
+                backgroundSize: "18px 18px",
+              }}
+            />
 
-                        e.preventDefault();
-                        const host = e.currentTarget as HTMLDivElement;
-                        const caret = getCaretOffsetIn(host);
-                        const text = host.innerText;
-                        const before = text.slice(0, caret);
-                        const lineIndex = before.split("\n").length; // 1-based
-                        const prefix = listPrefix(style, lineIndex + 1);
-                        const inserted = `\n${prefix}`;
-
-                        // Update DOM at caret first (prevents jumping to start)
-                        insertTextAtCaret(host, inserted);
-
-                        // Sync state from DOM after insertion
-                        setTimeout(() => {
-                          const nextText = host.innerText;
+            {/* Elements layer */}
+            <div className="absolute inset-0">
+              {sorted.map((el) => {
+                const isSelected = el.id === selectedId;
+                const locked = !!el.locked;
+                return (
+                  <div
+                    key={el.id}
+                    className={clsx("absolute", isSelected && "ring-2 ring-blue-500 ring-offset-1")}
+                    style={{
+                      left: el.x,
+                      top: el.y,
+                      width: el.width,
+                      height: el.height,
+                      cursor: locked ? "not-allowed" : draggingId === el.id ? "grabbing" : "grab",
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (locked) return;
+                      onSelect(el.id);
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      if (locked) return;
+                      onSelect(el.id);
+                      const p = getPointerInPage(e);
+                      if (!p) return;
+                      if (resizeState) return;
+                      setDraggingId(el.id);
+                      setDragOffset({ x: p.x - el.x, y: p.y - el.y });
+                      containerRef.current?.setPointerCapture(e.pointerId);
+                    }}
+                  >
+                    {el.type === "shape" ? (
+                      <div
+                        className="w-full h-full"
+                        style={{
+                          backgroundColor: el.fill,
+                          borderRadius: el.borderRadius ?? 0,
+                        }}
+                      />
+                    ) : el.type === "image" ? (
+                      <img
+                        src={el.imageData}
+                        alt="CV Image"
+                        className="w-full h-full object-contain"
+                        style={{
+                          transform: el.rotation ? `rotate(${el.rotation}deg)` : undefined,
+                          opacity: el.opacity ?? 1,
+                          pointerEvents: "none",
+                          userSelect: "none",
+                        }}
+                        draggable={false}
+                      />
+                    ) : (
+                      <div
+                        ref={(node) => {
+                          textNodeById.current[el.id] = node;
+                        }}
+                        className="w-full h-full px-2 py-1 outline-none"
+                        contentEditable
+                        suppressContentEditableWarning
+                        spellCheck={false}
+                        onFocus={() => setEditingId(el.id)}
+                        onBlur={(e) => {
+                          setEditingId((prev) => (prev === el.id ? null : prev));
+                          const nextText = (e.currentTarget as HTMLDivElement).innerText;
                           onChangeElements(
                             elements.map((it) =>
                               it.id === el.id && it.type === "text"
@@ -582,140 +544,184 @@ export function CanvasStage(props: {
                                 : it
                             )
                           );
-                        }, 0);
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelect(el.id);
-                      }}
-                      style={{
-                        fontSize: el.fontSize,
-                        fontWeight: el.fontWeight,
-                        color: el.color,
-                        fontFamily: el.type === "text" ? el.fontFamily : undefined,
-                        textAlign: el.align,
-                        whiteSpace: "pre-wrap",
-                        lineHeight: 1.35,
-                        userSelect: "text",
-                      }}
-                    >
-                    </div>
-                  )}
+                        }}
+                        onInput={(e) => {
+                          const nextText = (e.currentTarget as HTMLDivElement).innerText;
+                          onChangeElements(
+                            elements.map((it) =>
+                              it.id === el.id && it.type === "text"
+                                ? ({
+                                    ...it,
+                                    text: nextText,
+                                    height: computeAutoHeight(nextText, it.fontSize),
+                                  } as CvElement)
+                                : it
+                            )
+                          );
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          if (el.type !== "text") return;
+                          const style = el.listStyle ?? "none";
+                          if (style === "none") return;
 
-                  {isSelected && (
-                    <>
-                      <div className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
-                      <div className="absolute -right-1 -top-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
-                      <div className="absolute -left-1 -bottom-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
-                      <div className="absolute -right-1 -bottom-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
+                          e.preventDefault();
+                          const host = e.currentTarget as HTMLDivElement;
+                          const caret = getCaretOffsetIn(host);
+                          const text = host.innerText;
+                          const before = text.slice(0, caret);
+                          const lineIndex = before.split("\n").length; // 1-based
+                          const prefix = listPrefix(style, lineIndex + 1);
+                          const inserted = `\n${prefix}`;
 
-                      {/* Resize handles for all elements */}
-                      {!locked &&
-                        ["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((handle) => {
-                        const common = {
-                          className: "absolute bg-blue-600 shadow cursor-pointer",
-                        };
-                        const base = {
-                          onMouseDown: (e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            const p2 = getPointerInPage(e);
-                            if (!p2) return;
-                            setResizeState({
-                              id: el.id,
-                              handle: handle as ResizeHandle,
-                              startX: p2.x,
-                              startY: p2.y,
-                              startWidth: el.width,
-                              startHeight: el.height,
-                              startLeft: el.x,
-                              startTop: el.y,
-                            });
-                          },
-                        };
+                          // Update DOM at caret first (prevents jumping to start)
+                          insertTextAtCaret(host, inserted);
 
-                        const size = handle.length === 1 ? { width: 4, height: 8 } : { width: 6, height: 6 };
-                        const pos: Record<string, React.CSSProperties> = {
-                          n: { left: "50%", top: "-4px", transform: "translateX(-50%)", cursor: "ns-resize" },
-                          s: { left: "50%", bottom: "-4px", transform: "translateX(-50%)", cursor: "ns-resize" },
-                          e: { right: "-4px", top: "50%", transform: "translateY(-50%)", cursor: "ew-resize" },
-                          w: { left: "-4px", top: "50%", transform: "translateY(-50%)", cursor: "ew-resize" },
-                          ne: { right: "-4px", top: "-4px", cursor: "nesw-resize" },
-                          nw: { left: "-4px", top: "-4px", cursor: "nwse-resize" },
-                          se: { right: "-4px", bottom: "-4px", cursor: "nwse-resize" },
-                          sw: { left: "-4px", bottom: "-4px", cursor: "nesw-resize" },
-                        };
-
-                        return (
-                          <div
-                            key={handle}
-                            {...base}
-                            style={{
-                              ...pos[handle],
-                              width: size.width,
-                              height: size.height,
-                              borderRadius: 999,
-                            }}
-                            className={`${common.className}`}
-                          />
-                        );
-                      })}
-
-                      {/* Floating action bar */}
-                      <div
-                        className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white shadow-lg border border-gray-200 rounded-full px-2 py-1 flex items-center gap-2"
-                      >
-                        <button
-                          className="text-xs text-gray-700 hover:text-blue-600"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => {
-                            const clone = { ...el, id: crypto.randomUUID(), x: el.x + 20, y: el.y + 20 };
-                            onChangeElements([...elements, clone]);
-                            onSelect(clone.id);
-                          }}
-                        >
-                          Copy
-                        </button>
-                        <button
-                          className="text-xs text-gray-700 hover:text-blue-600"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => {
-                            onChangeElements(elements.filter((it) => it.id !== el.id));
-                            onSelect(null);
-                          }}
-                        >
-                          Delete
-                        </button>
-                        <button
-                          className="text-xs text-gray-700 hover:text-blue-600"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => {
+                          // Sync state from DOM after insertion
+                          setTimeout(() => {
+                            const nextText = host.innerText;
                             onChangeElements(
-                              elements.map((it) => (it.id === el.id ? { ...it, locked: !it.locked } : it))
+                              elements.map((it) =>
+                                it.id === el.id && it.type === "text"
+                                  ? ({
+                                      ...it,
+                                      text: nextText,
+                                      height: computeAutoHeight(nextText, it.fontSize),
+                                    } as CvElement)
+                                  : it
+                              )
                             );
-                          }}
-                        >
-                          {locked ? "Unlock" : "Lock"}
-                        </button>
-                        <button
-                          className="text-xs text-gray-700 hover:text-blue-600"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={() => {
-                            const c = window.prompt("Add comment", el.comment || "");
-                            if (c !== null) {
+                          }, 0);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelect(el.id);
+                        }}
+                        style={{
+                          fontSize: el.fontSize,
+                          fontWeight: el.fontWeight,
+                          color: el.color,
+                          fontFamily: el.type === "text" ? el.fontFamily : undefined,
+                          textAlign: el.align,
+                          whiteSpace: "pre-wrap",
+                          lineHeight: 1.35,
+                          userSelect: "text",
+                        }}
+                      ></div>
+                    )}
+
+                    {isSelected && (
+                      <>
+                        <div className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
+                        <div className="absolute -right-1 -top-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
+                        <div className="absolute -left-1 -bottom-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
+                        <div className="absolute -right-1 -bottom-1 w-2 h-2 rounded-full bg-blue-600 shadow" />
+
+                        {/* Resize handles for all elements */}
+                        {!locked &&
+                          ["n", "s", "e", "w", "ne", "nw", "se", "sw"].map((handle) => {
+                            const common = {
+                              className: "absolute bg-blue-600 shadow cursor-pointer",
+                            };
+                            const base = {
+                              onPointerDown: (e: React.PointerEvent) => {
+                                e.stopPropagation();
+                                const p2 = getPointerInPage(e);
+                                if (!p2) return;
+                                setResizeState({
+                                  id: el.id,
+                                  handle: handle as ResizeHandle,
+                                  startX: p2.x,
+                                  startY: p2.y,
+                                  startWidth: el.width,
+                                  startHeight: el.height,
+                                  startLeft: el.x,
+                                  startTop: el.y,
+                                });
+                                containerRef.current?.setPointerCapture(e.pointerId);
+                              },
+                            };
+
+                            const size = handle.length === 1 ? { width: 4, height: 8 } : { width: 6, height: 6 };
+                            const pos: Record<string, React.CSSProperties> = {
+                              n: { left: "50%", top: "-4px", transform: "translateX(-50%)", cursor: "ns-resize" },
+                              s: { left: "50%", bottom: "-4px", transform: "translateX(-50%)", cursor: "ns-resize" },
+                              e: { right: "-4px", top: "50%", transform: "translateY(-50%)", cursor: "ew-resize" },
+                              w: { left: "-4px", top: "50%", transform: "translateY(-50%)", cursor: "ew-resize" },
+                              ne: { right: "-4px", top: "-4px", cursor: "nesw-resize" },
+                              nw: { left: "-4px", top: "-4px", cursor: "nwse-resize" },
+                              se: { right: "-4px", bottom: "-4px", cursor: "nwse-resize" },
+                              sw: { left: "-4px", bottom: "-4px", cursor: "nesw-resize" },
+                            };
+
+                            return (
+                              <div
+                                key={handle}
+                                {...base}
+                                style={{
+                                  ...pos[handle],
+                                  width: size.width,
+                                  height: size.height,
+                                  borderRadius: 999,
+                                }}
+                                className={`${common.className}`}
+                              />
+                            );
+                          })}
+
+                        {/* Floating action bar */}
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white shadow-lg border border-gray-200 rounded-full px-2 py-1 flex items-center gap-2">
+                          <button
+                            className="text-xs text-gray-700 hover:text-blue-600"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => {
+                              const clone = { ...el, id: crypto.randomUUID(), x: el.x + 20, y: el.y + 20 };
+                              onChangeElements([...elements, clone]);
+                              onSelect(clone.id);
+                            }}
+                          >
+                            Copy
+                          </button>
+                          <button
+                            className="text-xs text-gray-700 hover:text-blue-600"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => {
+                              onChangeElements(elements.filter((it) => it.id !== el.id));
+                              onSelect(null);
+                            }}
+                          >
+                            Delete
+                          </button>
+                          <button
+                            className="text-xs text-gray-700 hover:text-blue-600"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => {
                               onChangeElements(
-                                elements.map((it) => (it.id === el.id ? { ...it, comment: c } : it))
+                                elements.map((it) => (it.id === el.id ? { ...it, locked: !it.locked } : it))
                               );
-                            }
-                          }}
-                        >
-                          Comment
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              );
-            })}
+                            }}
+                          >
+                            {locked ? "Unlock" : "Lock"}
+                          </button>
+                          <button
+                            className="text-xs text-gray-700 hover:text-blue-600"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onClick={() => {
+                              const c = window.prompt("Add comment", el.comment || "");
+                              if (c !== null) {
+                                onChangeElements(elements.map((it) => (it.id === el.id ? { ...it, comment: c } : it)));
+                              }
+                            }}
+                          >
+                            Comment
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>

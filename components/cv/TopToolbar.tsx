@@ -4,7 +4,7 @@ import React from "react";
 import { Download, Minus, Plus, ChevronLeft, ChevronRight, X, FilePlus } from "lucide-react";
 import type { CvElement, CvPageSize } from "@/lib/cv-model";
 
-const zoomOptions = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const zoomOptions = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
 
 const controlBase =
   "text-xs text-gray-900 bg-white border border-gray-300 rounded-md px-2 py-1 outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500";
@@ -136,7 +136,7 @@ export function TopToolbar(props: {
   ] as const;
 
   return (
-    <div className="h-14 bg-white border-b border-gray-200 flex items-center px-3 gap-3">
+    <div className="h-14 bg-white border-b border-gray-200 flex items-center px-3 gap-3 overflow-x-auto whitespace-nowrap">
       <div className="flex items-center gap-2">
         <div className="text-sm font-semibold text-gray-900">CV Builder</div>
         <span className="text-xs text-gray-400">•</span>
@@ -310,7 +310,11 @@ export function TopToolbar(props: {
           className={controlBase}
           title="Zoom"
         >
-          {zoomOptions.map((z) => (
+          {(
+            zoomOptions.includes(zoom)
+              ? zoomOptions
+              : [...zoomOptions, zoom].sort((a, b) => a - b)
+          ).map((z) => (
             <option key={z} value={z}>
               {Math.round(z * 100)}%
             </option>

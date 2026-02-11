@@ -8,11 +8,18 @@ export function RightInspector(props: {
   selected: CvElement | null;
   onChange: (updates: Partial<CvElement>) => void;
   onDelete: () => void;
+  variant?: "sidebar" | "sheet";
+  containerClassName?: string;
 }) {
-  const { selected, onChange, onDelete } = props;
+  const { selected, onChange, onDelete, variant = "sidebar", containerClassName } = props;
+
+  const base =
+    variant === "sheet"
+      ? "w-full bg-white p-4 overflow-auto"
+      : "w-72 bg-white border-l border-gray-200 p-4 overflow-auto";
 
   return (
-    <div className="w-72 bg-white border-l border-gray-200 p-4 overflow-auto">
+    <div className={`${base} ${containerClassName ?? ""}`.trim()}>
       <div className="text-sm font-semibold text-gray-900 mb-2">Properties</div>
 
       {!selected && (
@@ -68,6 +75,16 @@ export function RightInspector(props: {
 
           {selected.type === "text" && (
             <>
+              <div>
+                <label className="text-xs text-gray-600 block mb-1">Text content</label>
+                <textarea
+                  value={selected.text}
+                  onChange={(e) => onChange({ text: e.target.value } as Partial<CvElement>)}
+                  className="w-full text-sm text-gray-900 border border-gray-200 rounded-md px-2 py-1.5 min-h-[60px] resize-y bg-white"
+                  rows={3}
+                  style={{ color: selected.color?.startsWith("#") ? selected.color : "#111827" }}
+                />
+              </div>
               <label className="text-xs text-gray-600 block">
                 Text color
                 <input

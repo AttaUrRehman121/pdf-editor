@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { CvDocument, CvElement, CvPageSize } from "@/lib/cv-model";
 import { PAGE_DIMENSIONS, newDocument } from "@/lib/cv-model";
 import { downloadPdfBytes, exportCvToPdf } from "@/lib/cv-export";
@@ -9,6 +9,10 @@ import { TopToolbar } from "./TopToolbar";
 import { CanvasStage } from "./CanvasStage";
 import { RightInspector } from "./RightInspector";
 import { makeModernTemplate } from "@/lib/cv-templates";
+import { MobileDrawer } from "@/components/ui/MobileDrawer";
+import { MobileSheet } from "@/components/ui/MobileSheet";
+import { useMediaQuery } from "@/lib/useMediaQuery";
+import { PanelLeft, SlidersHorizontal } from "lucide-react";
 
 export type LeftTab = "text" | "elements" | "templates" | "emojis" | "settings";
 
@@ -29,9 +33,64 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
   const [leftTab, setLeftTab] = useState<LeftTab>("text");
   const [zoom, setZoom] = useState(1);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const isMobile = useMediaQuery("(max-width: 900px)");
+  const [mobileLeftOpen, setMobileLeftOpen] = useState(false);
+  const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
+  const stageWrapRef = useRef<HTMLDivElement | null>(null);
+  const userZoomedRef = useRef(false);
 
   const page = doc.pages[currentPageIndex] || doc.pages[0];
   const pageDims = PAGE_DIMENSIONS[doc.pageSize];
+
+  // Auto-fit zoom on mobile so the page stays inside the viewport.
+  useEffect(() => {
+    if (!isMobile) {
+      userZoomedRef.current = false;
+      return;
+    }
+
+    // Entering mobile: allow auto-fit again.
+    userZoomedRef.current = false;
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const computeFit = () => {
+      if (userZoomedRef.current) return;
+      const host = stageWrapRef.current;
+      if (!host) return;
+
+      const w = host.clientWidth;
+      const h = host.clientHeight;
+      if (!w || !h) return;
+
+      // CanvasStage adds padding (mobile ~12px each side with p-3)
+      const padX = 24;
+      const padY = 24;
+      const fitW = (w - padX) / pageDims.width;
+      const fitH = (h - padY) / pageDims.height;
+      const next = Math.max(0.25, Math.min(1, Math.min(fitW, fitH)));
+      const rounded = Math.round(next * 100) / 100;
+
+      setZoom((prev) => (Math.abs(prev - rounded) > 0.01 ? rounded : prev));
+    };
+
+    computeFit();
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined" && stageWrapRef.current) {
+      ro = new ResizeObserver(() => computeFit());
+      ro.observe(stageWrapRef.current);
+    } else {
+      window.addEventListener("resize", computeFit);
+    }
+
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", computeFit);
+    };
+  }, [isMobile, pageDims.width, pageDims.height]);
 
   const selectedElement: CvElement | null = useMemo(() => {
     if (!selectedId) return null;
@@ -201,7 +260,10 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
         pageSize={doc.pageSize}
         onChangePageSize={setPageSize}
         zoom={zoom}
-        onChangeZoom={setZoom}
+        onChangeZoom={(z) => {
+          userZoomedRef.current = true;
+          setZoom(z);
+        }}
         selected={selectedElement}
         onChangeSelected={(updates) => {
           if (!selectedId) return;
@@ -241,79 +303,200 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
       />
 
       <div className="flex h-[calc(100vh-6rem)]">
-        <LeftPanel
-          tab={leftTab}
-          onChangeTab={setLeftTab}
-          onClearCanvas={clearCanvas}
-          onApplyTemplate={(elements) => {
-            setDoc((prev) => {
-              const newPages = [...prev.pages];
-              newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements };
-              return { ...prev, pages: newPages };
-            });
-            setSelectedId(null);
-          }}
-          onAddElements={(elements) => {
-            setDoc((prev) => {
-              const newPages = [...prev.pages];
-              newPages[currentPageIndex] = {
-                ...newPages[currentPageIndex],
-                elements: [...newPages[currentPageIndex].elements, ...elements],
-              };
-              return { ...prev, pages: newPages };
-            });
-            // select last added (topmost)
-            const last = elements[elements.length - 1];
-            if (last) setSelectedId(last.id);
-          }}
-          watermark={watermark}
-          onWatermarkChange={setWatermark}
-        />
+        {!isMobile && (
+          <LeftPanel
+            tab={leftTab}
+            onChangeTab={setLeftTab}
+            onClearCanvas={clearCanvas}
+            onApplyTemplate={(elements) => {
+              setDoc((prev) => {
+                const newPages = [...prev.pages];
+                newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements };
+                return { ...prev, pages: newPages };
+              });
+              setSelectedId(null);
+            }}
+            onAddElements={(elements) => {
+              setDoc((prev) => {
+                const newPages = [...prev.pages];
+                newPages[currentPageIndex] = {
+                  ...newPages[currentPageIndex],
+                  elements: [...newPages[currentPageIndex].elements, ...elements],
+                };
+                return { ...prev, pages: newPages };
+              });
+              // select last added (topmost)
+              const last = elements[elements.length - 1];
+              if (last) setSelectedId(last.id);
+            }}
+            watermark={watermark}
+            onWatermarkChange={setWatermark}
+          />
+        )}
 
-        <CanvasStage
-          pageSize={doc.pageSize}
-          elements={page.elements}
-          selectedId={selectedId}
-          zoom={zoom}
-          onSelect={setSelectedId}
-          onChangeElements={(next) => {
-            setDoc((prev) => {
-              const newPages = [...prev.pages];
-              newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements: next };
-              return { ...prev, pages: newPages };
-            });
-          }}
-        />
+        <div ref={stageWrapRef} className={`flex-1 min-w-0 ${isMobile ? "pb-16" : ""}`}>
+          <CanvasStage
+            pageSize={doc.pageSize}
+            elements={page.elements}
+            selectedId={selectedId}
+            zoom={zoom}
+            onSelect={setSelectedId}
+            onChangeElements={(next) => {
+              setDoc((prev) => {
+                const newPages = [...prev.pages];
+                newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements: next };
+                return { ...prev, pages: newPages };
+              });
+            }}
+          />
+        </div>
 
-        <RightInspector
-          selected={selectedElement}
-          onDelete={() => {
-            if (!selectedId) return;
-            setDoc((prev) => {
-              const newPages = [...prev.pages];
-              newPages[currentPageIndex] = {
-                ...newPages[currentPageIndex],
-                elements: newPages[currentPageIndex].elements.filter((e) => e.id !== selectedId),
-              };
-              return { ...prev, pages: newPages };
-            });
-            setSelectedId(null);
-          }}
-          onChange={(updates) => {
-            if (!selectedId) return;
-            setDoc((prev) => {
-              const newPages = [...prev.pages];
-              newPages[currentPageIndex] = {
-                ...newPages[currentPageIndex],
-                elements: newPages[currentPageIndex].elements.map((el) =>
-                  el.id === selectedId ? ({ ...el, ...updates } as CvElement) : el
-                ),
-              };
-              return { ...prev, pages: newPages };
-            });
-          }}
-        />
+        {/* Right Panel – only show when an element is selected */}
+        {!isMobile && selectedId && (
+          <RightInspector
+            selected={selectedElement}
+            onDelete={() => {
+              if (!selectedId) return;
+              setDoc((prev) => {
+                const newPages = [...prev.pages];
+                newPages[currentPageIndex] = {
+                  ...newPages[currentPageIndex],
+                  elements: newPages[currentPageIndex].elements.filter((e) => e.id !== selectedId),
+                };
+                return { ...prev, pages: newPages };
+              });
+              setSelectedId(null);
+            }}
+            onChange={(updates) => {
+              if (!selectedId) return;
+              setDoc((prev) => {
+                const newPages = [...prev.pages];
+                const page = newPages[currentPageIndex];
+                const el = page.elements.find((e) => e.id === selectedId);
+                const merged = el ? ({ ...el, ...updates } as CvElement) : null;
+                const final =
+                  merged?.type === "text" && ("text" in updates || "fontSize" in updates)
+                    ? { ...merged, height: computeAutoHeight(merged.text, merged.fontSize) }
+                    : merged;
+                newPages[currentPageIndex] = {
+                  ...page,
+                  elements: page.elements.map((e) => (e.id === selectedId && final ? final : e)),
+                };
+                return { ...prev, pages: newPages };
+              });
+            }}
+          />
+        )}
       </div>
+
+      {isMobile && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200 px-3 py-2 flex items-center gap-2"
+          style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)" }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setMobileLeftOpen(true);
+              setMobilePropsOpen(false);
+            }}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 hover:bg-gray-50 text-sm font-semibold whitespace-nowrap"
+            title="Open tools"
+          >
+            <PanelLeft size={16} />
+            Tools
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMobilePropsOpen(true);
+              setMobileLeftOpen(false);
+            }}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 hover:bg-gray-50 text-sm font-semibold whitespace-nowrap"
+            title="Open properties"
+          >
+            <SlidersHorizontal size={16} />
+            Properties
+          </button>
+          <div className="flex-1" />
+          {selectedElement && (
+            <div className="text-xs text-gray-600 truncate">
+              Selected: <span className="font-semibold text-gray-900">{selectedElement.type}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {isMobile && (
+        <>
+          <MobileDrawer open={mobileLeftOpen} onClose={() => setMobileLeftOpen(false)} ariaLabel="Tools">
+            <LeftPanel
+              tab={leftTab}
+              onChangeTab={setLeftTab}
+              onClearCanvas={clearCanvas}
+              onApplyTemplate={(elements) => {
+                setDoc((prev) => {
+                  const newPages = [...prev.pages];
+                  newPages[currentPageIndex] = { ...newPages[currentPageIndex], elements };
+                  return { ...prev, pages: newPages };
+                });
+                setSelectedId(null);
+              }}
+              onAddElements={(elements) => {
+                setDoc((prev) => {
+                  const newPages = [...prev.pages];
+                  newPages[currentPageIndex] = {
+                    ...newPages[currentPageIndex],
+                    elements: [...newPages[currentPageIndex].elements, ...elements],
+                  };
+                  return { ...prev, pages: newPages };
+                });
+                const last = elements[elements.length - 1];
+                if (last) setSelectedId(last.id);
+              }}
+              watermark={watermark}
+              onWatermarkChange={setWatermark}
+            />
+          </MobileDrawer>
+
+          <MobileSheet open={mobilePropsOpen} onClose={() => setMobilePropsOpen(false)} ariaLabel="Properties">
+            <RightInspector
+              variant="sheet"
+              selected={selectedElement}
+              onDelete={() => {
+                if (!selectedId) return;
+                setDoc((prev) => {
+                  const newPages = [...prev.pages];
+                  newPages[currentPageIndex] = {
+                    ...newPages[currentPageIndex],
+                    elements: newPages[currentPageIndex].elements.filter((e) => e.id !== selectedId),
+                  };
+                  return { ...prev, pages: newPages };
+                });
+                setSelectedId(null);
+              }}
+              onChange={(updates) => {
+                if (!selectedId) return;
+                setDoc((prev) => {
+                  const newPages = [...prev.pages];
+                  const page = newPages[currentPageIndex];
+                  const el = page.elements.find((e) => e.id === selectedId);
+                  const merged = el ? ({ ...el, ...updates } as CvElement) : null;
+                  const final =
+                    merged?.type === "text" && "text" in updates
+                      ? { ...merged, height: computeAutoHeight(merged.text, merged.fontSize) }
+                      : merged;
+                  newPages[currentPageIndex] = {
+                    ...page,
+                    elements: page.elements.map((e) => (e.id === selectedId && final ? final : e)),
+                  };
+                  return { ...prev, pages: newPages };
+                });
+              }}
+            />
+          </MobileSheet>
+        </>
+      )}
     </div>
   );
 }
