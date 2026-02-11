@@ -16,7 +16,7 @@ export function RightInspector(props: {
   const base =
     variant === "sheet"
       ? "w-full bg-white p-4 overflow-auto"
-      : "w-72 bg-white border-l border-gray-200 p-4 overflow-auto";
+      : "w-72 shrink-0 bg-white border-l border-gray-200 p-4 overflow-auto";
 
   return (
     <div className={`${base} ${containerClassName ?? ""}`.trim()}>

@@ -302,7 +302,7 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
         onRemovePage={() => removePage(currentPageIndex)}
       />
 
-      <div className="flex h-[calc(100vh-6rem)]">
+      <div className="flex h-[calc(100vh-6rem)] min-w-0">
         {!isMobile && (
           <LeftPanel
             tab={leftTab}
@@ -334,7 +334,7 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
           />
         )}
 
-        <div ref={stageWrapRef} className={`flex-1 min-w-0 ${isMobile ? "pb-16" : ""}`}>
+        <div ref={stageWrapRef} className={`flex-1 min-w-0 relative ${isMobile ? "pb-16" : ""}`}>
           <CanvasStage
             pageSize={doc.pageSize}
             elements={page.elements}
@@ -349,11 +349,28 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
               });
             }}
           />
+          {isMobile && page.elements.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center px-6 py-4 bg-white/90 backdrop-blur rounded-xl shadow-lg border border-gray-200 pointer-events-auto">
+                <p className="text-sm font-medium text-gray-700 mb-1">Start building your CV</p>
+                <p className="text-xs text-gray-500 mb-3">Tap <strong>Tools</strong> below to add text, shapes, or choose a template</p>
+                <button
+                  type="button"
+                  onClick={() => { setMobileLeftOpen(true); setMobilePropsOpen(false); }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700"
+                >
+                  <PanelLeft size={16} />
+                  Open Tools
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right Panel – only show when an element is selected */}
         {!isMobile && selectedId && (
-          <RightInspector
+          <div className="shrink-0">
+            <RightInspector
             selected={selectedElement}
             onDelete={() => {
               if (!selectedId) return;
@@ -385,7 +402,8 @@ export function CvDesigner({ initialTemplate }: CvDesignerProps) {
                 return { ...prev, pages: newPages };
               });
             }}
-          />
+            />
+          </div>
         )}
       </div>
 

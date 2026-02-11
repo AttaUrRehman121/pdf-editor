@@ -779,7 +779,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
           </div>
 
           {/* Main Editor Layout */}
-          <div className="flex h-[calc(100vh-6rem)]">
+          <div className="flex h-[calc(100vh-6rem)] min-w-0">
             {/* Left Panel */}
             {!isMobile && (
               <PdfLeftPanel
@@ -806,7 +806,7 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
             {/* Canvas Area */}
             {fileUrl ? (
               <div 
-                className="flex-1 overflow-auto flex justify-center px-2 bg-gray-50"
+                className="flex-1 min-w-0 overflow-auto flex justify-center px-2 bg-gray-50"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -1169,7 +1169,8 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
 
             {/* Right Panel – only show when an element is selected */}
             {!isMobile && (selectedTextId || selectedImageId) && (
-              <PdfRightInspector
+              <div className="shrink-0">
+                <PdfRightInspector
                 selectedText={selectedTextId ? items.find((i) => i.id === selectedTextId) || null : null}
                 selectedImage={selectedImageId ? images.find((i) => i.id === selectedImageId) || null : null}
                 onUpdateText={(updates) => {
@@ -1195,7 +1196,8 @@ export default function PdfEditor({ initialTemplate, initialMode }: PdfEditorPro
                     handleImageDelete(selectedImageId);
                   }
                 }}
-              />
+                />
+              </div>
             )}
           </div>
 
